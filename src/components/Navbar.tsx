@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Input } from '@/components/ui/input';
+import GlobalSearch from '@/components/GlobalSearch';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -15,7 +15,6 @@ import {
 import { Badge } from '@/components/ui/badge';
 import UserAvatar from '@/components/UserAvatar';
 import {
-  Search,
   Bell,
   LogOut,
   Settings,
@@ -35,7 +34,6 @@ const Navbar = () => {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchQuery, setSearchQuery] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -102,14 +100,8 @@ const Navbar = () => {
 
           {/* Search + Actions */}
           <div className="flex items-center gap-2">
-            <div className="hidden sm:block relative w-48 lg:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-9 bg-muted/50"
-              />
+            <div className="hidden sm:block w-48 lg:w-72">
+              <GlobalSearch />
             </div>
 
             <Button variant="ghost" size="icon" onClick={toggleTheme} className="text-muted-foreground">
