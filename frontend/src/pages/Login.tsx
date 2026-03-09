@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -114,13 +114,6 @@ const Login = () => {
             >
               {loading ? 'Logging in...' : 'Log In'}
             </Button>
-
-            <p className="text-center text-sm text-gray-500 pt-1">
-              Don't have an account?{' '}
-              <Link to="/signup" className="text-[#7C3AED] font-semibold hover:underline">
-                Sign Up
-              </Link>
-            </p>
           </form>
 
           {/* Mobile footer */}
