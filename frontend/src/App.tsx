@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import Login from "./pages/Login";
-import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Tracker from "./pages/Tracker";
 import UsersPage from "./pages/UsersPage";
@@ -49,24 +48,22 @@ const RoleRoute = ({
       <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
     </div>
   );
-  // If role not allowed → silently redirect to home
   if (!role || !allowed.includes(role)) return <Navigate to="/" replace />;
   return <>{children}</>;
 };
 
 const AppRoutes = () => (
   <Routes>
-    {/* Public routes */}
+    {/* Public — login only, no signup */}
     <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-    <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
 
-    {/* All roles */}
+    {/* All authenticated roles */}
     <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
     <Route path="/tracker" element={<ProtectedRoute><Tracker /></ProtectedRoute>} />
     <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
     <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
 
-    {/* Admin only — redirects manager/user back to "/" */}
+    {/* Admin only */}
     <Route path="/users" element={
       <ProtectedRoute>
         <RoleRoute allowed={['admin']}>
@@ -82,7 +79,7 @@ const AppRoutes = () => (
       </ProtectedRoute>
     } />
 
-    {/* Manager only — redirects admin/user back to "/" */}
+    {/* Manager only */}
     <Route path="/team" element={
       <ProtectedRoute>
         <RoleRoute allowed={['manager']}>
@@ -90,6 +87,9 @@ const AppRoutes = () => (
         </RoleRoute>
       </ProtectedRoute>
     } />
+
+    {/* Redirect /signup to /login in case anyone visits it directly */}
+    <Route path="/signup" element={<Navigate to="/login" replace />} />
 
     <Route path="*" element={<NotFound />} />
   </Routes>
