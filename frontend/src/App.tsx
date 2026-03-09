@@ -36,17 +36,61 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+const RoleRoute = ({
+  children,
+  allowed,
+}: {
+  children: React.ReactNode;
+  allowed: string[];
+}) => {
+  const { role, loading } = useAuth();
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+  // If role not allowed → silently redirect to home
+  if (!role || !allowed.includes(role)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+};
+
 const AppRoutes = () => (
   <Routes>
+    {/* Public routes */}
     <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
     <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
+
+    {/* All roles */}
     <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
     <Route path="/tracker" element={<ProtectedRoute><Tracker /></ProtectedRoute>} />
-    <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
-    <Route path="/departments" element={<ProtectedRoute><Departments /></ProtectedRoute>} />
-    <Route path="/team" element={<ProtectedRoute><Team /></ProtectedRoute>} />
     <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
     <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+
+    {/* Admin only — redirects manager/user back to "/" */}
+    <Route path="/users" element={
+      <ProtectedRoute>
+        <RoleRoute allowed={['admin']}>
+          <UsersPage />
+        </RoleRoute>
+      </ProtectedRoute>
+    } />
+    <Route path="/departments" element={
+      <ProtectedRoute>
+        <RoleRoute allowed={['admin']}>
+          <Departments />
+        </RoleRoute>
+      </ProtectedRoute>
+    } />
+
+    {/* Manager only — redirects admin/user back to "/" */}
+    <Route path="/team" element={
+      <ProtectedRoute>
+        <RoleRoute allowed={['manager']}>
+          <Team />
+        </RoleRoute>
+      </ProtectedRoute>
+    } />
+
     <Route path="*" element={<NotFound />} />
   </Routes>
 );

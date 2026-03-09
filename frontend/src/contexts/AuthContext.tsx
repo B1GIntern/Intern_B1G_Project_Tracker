@@ -31,6 +31,14 @@ export const useAuth = () => {
   return context;
 };
 
+// ─── DEV ONLY ────────────────────────────────────────────────────────────────
+// Only keep ONE line below — comment out the other two
+// TODO: Remove entirely and change `role: DEV_ROLE` to `role: role` when backend is ready
+const DEV_ROLE: AppRole = 'admin';    // ← Admin view
+// const DEV_ROLE: AppRole = 'manager'; // ← Manager view
+// const DEV_ROLE: AppRole = 'user';    // ← User view
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -112,7 +120,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, role, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{
+      user,
+      session,
+      profile,
+      // ── DEV: overrides real Supabase role with DEV_ROLE above ──
+      // TODO: change `DEV_ROLE` to `role` when backend is ready
+      role: DEV_ROLE,
+      // ───────────────────────────────────────────────────────────
+      loading,
+      signUp,
+      signIn,
+      signOut,
+    }}>
       {children}
     </AuthContext.Provider>
   );
