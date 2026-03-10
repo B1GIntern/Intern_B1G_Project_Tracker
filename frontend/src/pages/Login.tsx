@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -32,64 +31,87 @@ const Login = () => {
   return (
     <div className="min-h-screen lg:flex">
 
-      {/* ── DESKTOP ONLY: Purple left panel ── */}
-      <div className="hidden lg:flex lg:w-1/2 bg-[#7C3AED] flex-col justify-center px-20 min-h-screen">
-        <div className="max-w-sm">
-          <h1 className="text-5xl font-bold text-white leading-tight mb-4">
-            B1G Project Tracker
+      {/* ── LEFT: Purple branding panel ── */}
+      <div className="hidden lg:flex lg:w-1/2 bg-[#7C3AED] flex-col items-center justify-center px-16 min-h-screen">
+        <div className="flex flex-col items-center text-center max-w-md">
+
+          {/* Kanban icon + B1G side by side */}
+          <div className="flex items-center gap-4 mb-5">
+            <svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1" y="1" width="50" height="50" rx="12" fill="white" fillOpacity="0.15" stroke="white" strokeOpacity="0.35" strokeWidth="1.5" />
+              <rect x="10" y="17" width="9" height="20" rx="2.5" fill="white" fillOpacity="0.85" />
+              <rect x="22" y="12" width="9" height="25" rx="2.5" fill="white" />
+              <rect x="34" y="21" width="9" height="16" rx="2.5" fill="white" fillOpacity="0.65" />
+              <rect x="10" y="10" width="33" height="2.5" rx="1.25" fill="white" fillOpacity="0.45" />
+            </svg>
+            <span className="text-white font-black text-5xl tracking-tight leading-none">B1G</span>
+          </div>
+
+          {/* App name — large bold white */}
+          <h1 className="text-white font-bold text-4xl tracking-wide mb-5">
+            Project Tracker
           </h1>
-          <p className="text-white/75 text-lg leading-relaxed">
+
+          {/* Tagline — white, centered, matching reference size */}
+          <p className="text-white/100 text-lg leading-relaxed text-center">
             Manage projects, track progress, and collaborate with your team efficiently.
           </p>
         </div>
       </div>
 
-      {/* ── Right / full-screen panel ── */}
-      <div className="lg:w-1/2 min-h-screen bg-white flex flex-col items-center justify-center px-6 sm:px-10 py-12">
+      {/* ── RIGHT: Login form panel ── */}
+      <div className="lg:w-1/2 min-h-screen bg-white flex flex-col items-center justify-center px-6 sm:px-12 lg:px-20 py-12">
         <div className="w-full max-w-sm">
 
-          {/* MOBILE ONLY: B1G circular logo */}
+          {/* Mobile only: compact logo */}
           <div className="flex flex-col items-center mb-10 lg:hidden">
-            <div
-              className="w-24 h-24 rounded-full flex items-center justify-center mb-3 shadow-lg"
-              style={{ background: 'linear-gradient(135deg, #7C3AED, #5B21B6)' }}
-            >
-              <span className="text-white font-black text-2xl tracking-tight">B1G</span>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-[#7C3AED] flex items-center justify-center">
+                <svg width="22" height="22" viewBox="0 0 52 52" fill="none">
+                  <rect x="10" y="17" width="9" height="20" rx="2.5" fill="white" fillOpacity="0.85" />
+                  <rect x="22" y="12" width="9" height="25" rx="2.5" fill="white" />
+                  <rect x="34" y="21" width="9" height="16" rx="2.5" fill="white" fillOpacity="0.65" />
+                </svg>
+              </div>
+              <span className="text-[#7C3AED] font-black text-2xl">B1G</span>
             </div>
-            <p className="text-sm font-bold text-gray-600 tracking-widest uppercase">B1G Corporation</p>
-            <p className="text-xs text-gray-400 tracking-wider">Project Tracker</p>
+            <p className="text-sm font-semibold text-gray-500 tracking-widest uppercase">Project Tracker</p>
           </div>
 
           {/* Heading */}
-          <div className="mb-8">
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">Welcome back</h2>
-            <p className="text-gray-500 text-sm">Log in to your account</p>
+          <div className="mb-8 text-center">
+            <h2 className="text-3xl font-bold text-gray-900 mb-1">Sign In</h2>
+            <p className="text-gray-400 text-sm">Enter your account credentials</p>
           </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-gray-700">Email</Label>
-              <Input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                className="h-11 rounded-xl border-gray-200 bg-gray-50 text-sm focus:bg-white focus:border-[#7C3AED] focus:ring-1 focus:ring-[#7C3AED] transition"
-              />
+              <label className="text-sm font-semibold text-gray-700">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  className="h-12 pl-10 rounded-xl border-gray-200 bg-gray-50 text-sm focus:bg-white focus:border-[#7C3AED] focus:ring-1 focus:ring-[#7C3AED] transition"
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-gray-700">Password</Label>
+              <label className="text-sm font-semibold text-gray-700">Password</label>
               <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   required
-                  className="h-11 rounded-xl border-gray-200 bg-gray-50 text-sm pr-10 focus:bg-white focus:border-[#7C3AED] focus:ring-1 focus:ring-[#7C3AED] transition"
+                  className="h-12 pl-10 pr-11 rounded-xl border-gray-200 bg-gray-50 text-sm focus:bg-white focus:border-[#7C3AED] focus:ring-1 focus:ring-[#7C3AED] transition"
                 />
                 <button
                   type="button"
@@ -100,7 +122,7 @@ const Login = () => {
                 </button>
               </div>
               <div className="flex justify-end pt-0.5">
-                <button type="button" className="text-xs text-[#7C3AED] hover:underline font-medium">
+                <button type="button" className="text-xs text-[#7C3AED] hover:underline font-semibold">
                   Forgot Password?
                 </button>
               </div>
@@ -109,15 +131,19 @@ const Login = () => {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full h-11 rounded-xl font-bold text-sm text-white"
+              className="w-full h-12 rounded-xl font-bold text-base text-white mt-1"
               style={{ background: 'linear-gradient(135deg, #7C3AED, #5B21B6)' }}
             >
-              {loading ? 'Logging in...' : 'Log In'}
+              {loading ? 'Signing in...' : 'Sign In'}
             </Button>
+
+            <p className="text-center text-xs text-gray-400 pt-1">
+              Sign in with your company email and password.
+            </p>
           </form>
 
           {/* Mobile footer */}
-          <p className="text-center text-xs text-gray-300 mt-12 lg:hidden">
+          <p className="text-center text-xs text-gray-300 mt-10 lg:hidden">
             B1G Corporation · Project Tracker
           </p>
         </div>
