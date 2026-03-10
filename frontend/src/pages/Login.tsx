@@ -34,8 +34,6 @@ const Login = () => {
       {/* ── LEFT: Purple branding panel ── */}
       <div className="hidden lg:flex lg:w-1/2 bg-[#7C3AED] flex-col items-center justify-center px-16 min-h-screen">
         <div className="flex flex-col items-center text-center max-w-md">
-
-          {/* Kanban icon + B1G side by side */}
           <div className="flex items-center gap-4 mb-5">
             <svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
               <rect x="1" y="1" width="50" height="50" rx="12" fill="white" fillOpacity="0.15" stroke="white" strokeOpacity="0.35" strokeWidth="1.5" />
@@ -46,14 +44,10 @@ const Login = () => {
             </svg>
             <span className="text-white font-black text-5xl tracking-tight leading-none">B1G</span>
           </div>
-
-          {/* App name — large bold white */}
           <h1 className="text-white font-bold text-4xl tracking-wide mb-5">
             Project Tracker
           </h1>
-
-          {/* Tagline — white, centered, matching reference size */}
-          <p className="text-white/100 text-lg leading-relaxed text-center">
+          <p className="text-white text-lg leading-relaxed text-center">
             Manage projects, track progress, and collaborate with your team efficiently.
           </p>
         </div>
@@ -119,11 +113,6 @@ const Login = () => {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <div className="flex justify-end pt-0.5">
-                <button type="button" className="text-xs text-[#7C3AED] hover:underline font-semibold">
-                  Forgot Password?
                 </button>
               </div>
             </div>
