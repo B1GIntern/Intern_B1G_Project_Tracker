@@ -86,11 +86,10 @@ const Navbar = () => {
               <Link
                 key={item.href}
                 to={item.href}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  location.pathname === item.href
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${location.pathname === item.href
                     ? 'bg-accent text-accent-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                }`}
+                  }`}
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
@@ -136,10 +135,12 @@ const Navbar = () => {
                   <Badge variant="secondary" className="mt-1 capitalize text-xs">{role}</Badge>
                 </div>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate('/settings')}>
+                {/* Profile → opens settings page on Profile tab */}
+                <DropdownMenuItem onClick={() => navigate('/settings?tab=profile')}>
                   <User className="h-4 w-4 mr-2" /> Profile
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/settings')}>
+                {/* Settings → opens settings page on Settings tab */}
+                <DropdownMenuItem onClick={() => navigate('/settings?tab=settings')}>
                   <Settings className="h-4 w-4 mr-2" /> Settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -169,11 +170,10 @@ const Navbar = () => {
                 key={item.href}
                 to={item.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  location.pathname === item.href
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${location.pathname === item.href
                     ? 'bg-accent text-accent-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                }`}
+                  }`}
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
