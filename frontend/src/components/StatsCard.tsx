@@ -26,9 +26,8 @@ const StatsCard = ({ title, value, icon: Icon, description, trend, trendValue }:
           <p className="text-xs text-muted-foreground mt-1">{description}</p>
         )}
         {trendValue && (
-          <p className={`text-xs mt-1 font-medium ${
-            trend === 'up' ? 'text-success' : trend === 'down' ? 'text-destructive' : 'text-muted-foreground'
-          }`}>
+          <p className={`text-xs mt-1 font-medium ${trend === 'up' ? 'text-success' : trend === 'down' ? 'text-destructive' : 'text-muted-foreground'
+            }`}>
             {trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→'} {trendValue}
           </p>
         )}

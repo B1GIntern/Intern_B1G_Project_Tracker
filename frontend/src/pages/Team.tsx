@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import AppLayout from '@/components/AppLayout';
 import UserAvatar from '@/components/UserAvatar';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Users } from 'lucide-react';
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
 interface TeamMember {
   user_id: string;
@@ -23,51 +24,13 @@ const Team = () => {
   useEffect(() => {
     if (!user || role !== 'manager') return;
     const fetchTeam = async () => {
-      // Get manager's departments
-      const { data: myDepts } = await supabase
-        .from('user_departments')
-        .select('department_id')
-        .eq('user_id', user.id);
-
-      if (!myDepts?.length) return;
-
-      const deptIds = myDepts.map(d => d.department_id);
-
-      // Get all users in those departments
-      const { data: deptUsers } = await supabase
-        .from('user_departments')
-        .select('user_id, department_id')
-        .in('department_id', deptIds);
-
-      if (!deptUsers?.length) return;
-
-      const userIds = [...new Set(deptUsers.map(u => u.user_id))];
-
-      const [profilesRes, rolesRes, deptsRes] = await Promise.all([
-        supabase.from('profiles').select('*').in('user_id', userIds),
-        supabase.from('user_roles').select('user_id, role').in('user_id', userIds),
-        supabase.from('departments').select('id, name').in('id', deptIds),
-      ]);
-
-      const profiles = profilesRes.data || [];
-      const allRoles = rolesRes.data || [];
-      const depts = deptsRes.data || [];
-
-      const teamMembers: TeamMember[] = profiles.map(p => {
-        const r = allRoles.find(r => r.user_id === p.user_id);
-        const ud = deptUsers.find(d => d.user_id === p.user_id);
-        const dept = depts.find(d => d.id === ud?.department_id);
-        return {
-          user_id: p.user_id,
-          full_name: p.full_name,
-          email: p.email,
-          avatar_url: p.avatar_url,
-          role: r?.role || 'user',
-          department: dept?.name || '—',
-        };
-      });
-
-      setMembers(teamMembers);
+      try {
+        const res = await fetch(`${API_BASE}/team`, { credentials: 'include' });
+        if (!res.ok) return;
+        setMembers(await res.json());
+      } catch {
+        setMembers([]);
+      }
     };
     fetchTeam();
   }, [user, role]);

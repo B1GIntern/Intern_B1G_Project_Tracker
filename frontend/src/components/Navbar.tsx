@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { supabase } from '@/integrations/supabase/client';
 import GlobalSearch from '@/components/GlobalSearch';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,19 +14,11 @@ import {
 import { Badge } from '@/components/ui/badge';
 import UserAvatar from '@/components/UserAvatar';
 import {
-  Bell,
-  LogOut,
-  Settings,
-  User,
-  Sun,
-  Moon,
-  LayoutDashboard,
-  Users,
-  Building2,
-  ListTodo,
-  Menu,
-  X,
+  Bell, LogOut, Settings, User, Sun, Moon,
+  LayoutDashboard, Users, Building2, ListTodo, Menu, X,
 } from 'lucide-react';
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
 const Navbar = () => {
   const { profile, role, signOut } = useAuth();
@@ -39,11 +30,16 @@ const Navbar = () => {
 
   useEffect(() => {
     const fetchUnread = async () => {
-      const { count } = await supabase
-        .from('notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('read', false);
-      setUnreadCount(count || 0);
+      try {
+        const res = await fetch(`${API_BASE}/notifications/unread-count`, {
+          credentials: 'include',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setUnreadCount(data.count ?? 0);
+      } catch {
+        setUnreadCount(0);
+      }
     };
     fetchUnread();
   }, [location]);
@@ -70,6 +66,7 @@ const Navbar = () => {
     <nav className="sticky top-0 z-50 glass border-b border-border/50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
+
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 shrink-0">
             <div className="w-9 h-9 rounded-lg gradient-primary flex items-center justify-center">
@@ -122,7 +119,7 @@ const Navbar = () => {
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-2 rounded-lg p-1 hover:bg-muted transition-colors">
                   <UserAvatar
-                    fullName={profile?.full_name || 'User'}
+                    fullName={profile?.full_name ?? 'User'}
                     avatarUrl={profile?.avatar_url}
                     size="sm"
                   />
@@ -135,11 +132,9 @@ const Navbar = () => {
                   <Badge variant="secondary" className="mt-1 capitalize text-xs">{role}</Badge>
                 </div>
                 <DropdownMenuSeparator />
-                {/* Profile → opens settings page on Profile tab */}
                 <DropdownMenuItem onClick={() => navigate('/settings?tab=profile')}>
                   <User className="h-4 w-4 mr-2" /> Profile
                 </DropdownMenuItem>
-                {/* Settings → opens settings page on Settings tab */}
                 <DropdownMenuItem onClick={() => navigate('/settings?tab=settings')}>
                   <Settings className="h-4 w-4 mr-2" /> Settings
                 </DropdownMenuItem>
@@ -150,7 +145,6 @@ const Navbar = () => {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Mobile menu toggle */}
             <Button
               variant="ghost"
               size="icon"

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import AppLayout from '@/components/AppLayout';
 import StatsCard from '@/components/StatsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,9 +9,20 @@ import {
   LineChart, Line, CartesianGrid,
 } from 'recharts';
 
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
+
+interface DashboardStats {
+  total: number;
+  inProgress: number;
+  completed: number;
+  departments: number;
+  overdue: number;
+  underReview: number;
+}
+
 const Dashboard = () => {
   const { user, role } = useAuth();
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<DashboardStats>({
     total: 0,
     inProgress: 0,
     completed: 0,
@@ -22,124 +32,29 @@ const Dashboard = () => {
   });
   const [deptChart, setDeptChart] = useState<{ name: string; tasks: number }[]>([]);
   const [trendChart, setTrendChart] = useState<{ date: string; completed: number }[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user || !role) return;
-
     const fetchStats = async () => {
-      const now = new Date();
-
-      if (role === 'admin') {
-        // Admin: sees everything across all departments
-        const [tasksRes, deptRes, deptsCountRes] = await Promise.all([
-          supabase.from('tasks').select('status, due_date, department_id, created_at'),
-          supabase.from('departments').select('id, name'),
-          supabase.from('departments').select('id', { count: 'exact', head: true }),
-        ]);
-
-        const tasks = tasksRes.data || [];
-        const depts = deptRes.data || [];
-
-        setStats({
-          total: tasks.length,
-          inProgress: tasks.filter(t => t.status === 'in_progress').length,
-          completed: tasks.filter(t => t.status === 'completed').length,
-          departments: deptsCountRes.count || 0,
-          overdue: tasks.filter(t => t.due_date && new Date(t.due_date) < now && t.status !== 'completed').length,
-          underReview: tasks.filter(t => t.status === 'under_review').length,
+      try {
+        const res = await fetch(`${API_BASE}/dashboard/stats`, {
+          credentials: 'include',
         });
-
-        setDeptChart(depts.map(d => ({
-          name: d.name,
-          tasks: tasks.filter(t => t.department_id === d.id).length,
-        })));
-
-        setTrendChart(buildTrend(tasks));
-
-      } else if (role === 'manager') {
-        // Manager: sees tasks only within their department(s)
-        const { data: myDepts } = await supabase
-          .from('user_departments')
-          .select('department_id')
-          .eq('user_id', user.id);
-
-        const deptIds = (myDepts || []).map(d => d.department_id);
-
-        if (!deptIds.length) return;
-
-        const [tasksRes, deptRes] = await Promise.all([
-          supabase.from('tasks').select('status, due_date, department_id, created_at').in('department_id', deptIds),
-          supabase.from('departments').select('id, name').in('id', deptIds),
-        ]);
-
-        const tasks = tasksRes.data || [];
-        const depts = deptRes.data || [];
-
-        setStats({
-          total: tasks.length,
-          inProgress: tasks.filter(t => t.status === 'in_progress').length,
-          completed: tasks.filter(t => t.status === 'completed').length,
-          departments: deptIds.length,
-          overdue: tasks.filter(t => t.due_date && new Date(t.due_date) < now && t.status !== 'completed').length,
-          underReview: tasks.filter(t => t.status === 'under_review').length,
-        });
-
-        setDeptChart(depts.map(d => ({
-          name: d.name,
-          tasks: tasks.filter(t => t.department_id === d.id).length,
-        })));
-
-        setTrendChart(buildTrend(tasks));
-
-      } else {
-        // User: sees only tasks assigned to them
-        const { data: tasksData } = await supabase
-          .from('tasks')
-          .select('status, due_date, department_id, created_at')
-          .eq('assigned_to', user.id);
-
-        const tasks = tasksData || [];
-
-        setStats({
-          total: tasks.length,
-          inProgress: tasks.filter(t => t.status === 'in_progress').length,
-          completed: tasks.filter(t => t.status === 'completed').length,
-          departments: 0,
-          overdue: tasks.filter(t => t.due_date && new Date(t.due_date) < now && t.status !== 'completed').length,
-          underReview: tasks.filter(t => t.status === 'under_review').length,
-        });
-
-        // No dept chart for regular users — show task status distribution instead
-        setDeptChart([
-          { name: 'To Do', tasks: tasks.filter(t => t.status === 'todo').length },
-          { name: 'In Progress', tasks: tasks.filter(t => t.status === 'in_progress').length },
-          { name: 'Under Review', tasks: tasks.filter(t => t.status === 'under_review').length },
-          { name: 'Completed', tasks: tasks.filter(t => t.status === 'completed').length },
-        ]);
-
-        setTrendChart(buildTrend(tasks));
+        if (!res.ok) throw new Error('Failed to fetch dashboard stats');
+        const data = await res.json();
+        // Expected: { stats: {...}, deptChart: [...], trendChart: [...] }
+        setStats(data.stats);
+        setDeptChart(data.deptChart ?? []);
+        setTrendChart(data.trendChart ?? []);
+      } catch {
+        // keep defaults on error
+      } finally {
+        setLoading(false);
       }
     };
-
     fetchStats();
   }, [user, role]);
-
-  // Builds last-7-days completion trend from task array
-  const buildTrend = (tasks: any[]) => {
-    const trend: { date: string; completed: number }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
-      trend.push({
-        date: d.toLocaleDateString('en', { weekday: 'short' }),
-        completed: tasks.filter(
-          t => t.status === 'completed' && t.created_at?.startsWith(dateStr)
-        ).length,
-      });
-    }
-    return trend;
-  };
 
   const getTitle = () => {
     switch (role) {
@@ -204,7 +119,9 @@ const Dashboard = () => {
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <p className="text-sm text-muted-foreground py-8 text-center">No data yet</p>
+                <p className="text-sm text-muted-foreground py-8 text-center">
+                  {loading ? 'Loading...' : 'No data yet'}
+                </p>
               )}
             </CardContent>
           </Card>

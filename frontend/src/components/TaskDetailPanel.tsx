@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { Paperclip, Download, Trash2, Upload } from 'lucide-react';
 import { format } from 'date-fns';
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
 interface Task {
   id: string;
@@ -66,7 +66,7 @@ interface TaskDetailPanelProps {
 }
 
 const TaskDetailPanel = ({ task, open, onClose, onSaved, profiles, departments, isNew }: TaskDetailPanelProps) => {
-  const { user, role } = useAuth();
+  const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('todo');
@@ -101,8 +101,16 @@ const TaskDetailPanel = ({ task, open, onClose, onSaved, profiles, departments, 
   }, [task, open]);
 
   const fetchAttachments = async (taskId: string) => {
-    const { data } = await supabase.from('task_attachments').select('*').eq('task_id', taskId);
-    setAttachments(data || []);
+    try {
+      const res = await fetch(`${API_BASE}/tasks/${taskId}/attachments`, {
+        credentials: 'include',
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setAttachments(data);
+    } catch {
+      setAttachments([]);
+    }
   };
 
   const handleSave = async () => {
@@ -112,25 +120,29 @@ const TaskDetailPanel = ({ task, open, onClose, onSaved, profiles, departments, 
       const payload = {
         title,
         description: description || null,
-        status: status as any,
+        status,
         progress,
         due_date: dueDate ? new Date(dueDate).toISOString() : null,
         assigned_to: assignedTo || null,
         department_id: departmentId || null,
       };
 
-      if (isNew || !task) {
-        const { error } = await supabase.from('tasks').insert({
-          ...payload,
-          created_by: user!.id,
-        });
-        if (error) throw error;
-        toast({ title: 'Task created' });
-      } else {
-        const { error } = await supabase.from('tasks').update(payload).eq('id', task.id);
-        if (error) throw error;
-        toast({ title: 'Task updated' });
+      const url = isNew || !task ? `${API_BASE}/tasks` : `${API_BASE}/tasks/${task.id}`;
+      const method = isNew || !task ? 'POST' : 'PUT';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message ?? 'Request failed');
       }
+
+      toast({ title: isNew ? 'Task created' : 'Task updated' });
       onSaved();
       onClose();
     } catch (err: any) {
@@ -142,32 +154,38 @@ const TaskDetailPanel = ({ task, open, onClose, onSaved, profiles, departments, 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length || !task) return;
     setUploading(true);
-    const file = e.target.files[0];
-    const path = `${task.id}/${Date.now()}_${file.name}`;
-    const { error: uploadError } = await supabase.storage.from('task-attachments').upload(path, file);
-    if (uploadError) {
-      toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });
-      setUploading(false);
-      return;
+    try {
+      const file = e.target.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${API_BASE}/tasks/${task.id}/attachments`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error('Upload failed');
+      await fetchAttachments(task.id);
+      toast({ title: 'File uploaded' });
+    } catch (err: any) {
+      toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
     }
-    const { data: urlData } = supabase.storage.from('task-attachments').getPublicUrl(path);
-    await supabase.from('task_attachments').insert({
-      task_id: task.id,
-      file_name: file.name,
-      file_url: urlData.publicUrl,
-      file_type: file.type,
-      file_size: file.size,
-      uploaded_by: user!.id,
-    });
-    fetchAttachments(task.id);
     setUploading(false);
-    toast({ title: 'File uploaded' });
   };
 
   const handleDeleteAttachment = async (att: Attachment) => {
-    await supabase.from('task_attachments').delete().eq('id', att.id);
-    fetchAttachments(task!.id);
-    toast({ title: 'Attachment deleted' });
+    try {
+      const res = await fetch(`${API_BASE}/tasks/${task!.id}/attachments/${att.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Delete failed');
+      await fetchAttachments(task!.id);
+      toast({ title: 'Attachment deleted' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
   };
 
   return (

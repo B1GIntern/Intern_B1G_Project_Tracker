@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import AppLayout from '@/components/AppLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Bell, Check, Trash2, CheckCheck } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
 interface Notification {
   id: string;
@@ -25,30 +25,49 @@ const Notifications = () => {
 
   const fetchNotifications = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-    setNotifications(data || []);
+    try {
+      const res = await fetch(`${API_BASE}/notifications`, { credentials: 'include' });
+      if (!res.ok) return;
+      setNotifications(await res.json());
+    } catch {
+      setNotifications([]);
+    }
   };
 
   useEffect(() => { fetchNotifications(); }, [user]);
 
   const markRead = async (id: string) => {
-    await supabase.from('notifications').update({ read: true }).eq('id', id);
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    try {
+      const res = await fetch(`${API_BASE}/notifications/${id}/read`, {
+        method: 'PATCH',
+        credentials: 'include',
+      });
+      if (!res.ok) return;
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    } catch { }
   };
 
   const markAllRead = async () => {
-    await supabase.from('notifications').update({ read: true }).eq('user_id', user!.id).eq('read', false);
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    toast({ title: 'All notifications marked as read' });
+    try {
+      const res = await fetch(`${API_BASE}/notifications/read-all`, {
+        method: 'PATCH',
+        credentials: 'include',
+      });
+      if (!res.ok) return;
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      toast({ title: 'All notifications marked as read' });
+    } catch { }
   };
 
   const deleteNotification = async (id: string) => {
-    await supabase.from('notifications').delete().eq('id', id);
-    setNotifications(prev => prev.filter(n => n.id !== id));
+    try {
+      const res = await fetch(`${API_BASE}/notifications/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) return;
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch { }
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -83,7 +102,7 @@ const Notifications = () => {
           {notifications.map(n => (
             <Card key={n.id} className={`border-border/50 transition-colors ${!n.read ? 'bg-accent/20' : ''}`}>
               <CardContent className="p-4 flex items-start gap-3">
-                <div className={`mt-0.5 rounded-full p-1.5 ${typeColorMap[n.type] || typeColorMap.info}`}>
+                <div className={`mt-0.5 rounded-full p-1.5 ${typeColorMap[n.type] ?? typeColorMap.info}`}>
                   <Bell className="h-3.5 w-3.5" />
                 </div>
                 <div className="flex-1 min-w-0">
