@@ -1,8 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
 type AppRole = 'admin' | 'manager' | 'user';
+
+interface User {
+  id: string;
+  email: string;
+}
 
 interface Profile {
   id: string;
@@ -14,7 +19,6 @@ interface Profile {
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
   profile: Profile | null;
   role: AppRole | null;
   loading: boolean;
@@ -32,8 +36,8 @@ export const useAuth = () => {
 };
 
 // ─── DEV ONLY ────────────────────────────────────────────────────────────────
-// Only keep ONE line below — comment out the other two
-// TODO: Remove entirely and change `role: DEV_ROLE` to `role: role` when backend is ready
+// Comment out the other two when testing different views
+// TODO: Remove entirely and use role from API when backend is ready
 const DEV_ROLE: AppRole = 'admin';    // ← Admin view
 // const DEV_ROLE: AppRole = 'manager'; // ← Manager view
 // const DEV_ROLE: AppRole = 'user';    // ← User view
@@ -41,93 +45,85 @@ const DEV_ROLE: AppRole = 'admin';    // ← Admin view
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-    setProfile(data);
-  };
-
-  const fetchRole = async (userId: string) => {
-    const { data } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-      .order('role')
-      .limit(1)
-      .single();
-    setRole((data?.role as AppRole) ?? 'user');
+  const fetchMe = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        setUser(null);
+        setProfile(null);
+        setRole(null);
+        return;
+      }
+      const data = await res.json();
+      // Expected: { user: { id, email }, profile: { ... }, role: 'admin' | 'manager' | 'user' }
+      setUser(data.user);
+      setProfile(data.profile);
+      setRole(data.role ?? 'user');
+    } catch {
+      setUser(null);
+      setProfile(null);
+      setRole(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          setTimeout(() => {
-            fetchProfile(session.user.id);
-            fetchRole(session.user.id);
-          }, 0);
-        } else {
-          setProfile(null);
-          setRole(null);
-        }
-        setLoading(false);
-      }
-    );
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-        fetchRole(session.user.id);
-      }
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    fetchMe();
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName },
-        emailRedirectTo: window.location.origin,
-      },
+    const res = await fetch(`${API_BASE}/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password, fullName }),
     });
-    if (error) throw error;
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message ?? 'Sign up failed');
+    }
+    await fetchMe();
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message ?? 'Sign in failed');
+    }
+    await fetchMe();
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    await fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    setUser(null);
+    setProfile(null);
+    setRole(null);
   };
 
   return (
     <AuthContext.Provider value={{
       user,
-      session,
       profile,
-      // ── DEV: overrides real Supabase role with DEV_ROLE above ──
+      // ── DEV: overrides real API role with DEV_ROLE above ──
       // TODO: change `DEV_ROLE` to `role` when backend is ready
       role: DEV_ROLE,
-      // ───────────────────────────────────────────────────────────
+      // ──────────────────────────────────────────────────────
       loading,
       signUp,
       signIn,

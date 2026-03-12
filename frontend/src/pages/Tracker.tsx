@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import AppLayout from '@/components/AppLayout';
 import TaskCard from '@/components/TaskCard';
 import TaskDetailPanel from '@/components/TaskDetailPanel';
@@ -11,6 +10,8 @@ import {
 } from '@/components/ui/select';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Plus, Search } from 'lucide-react';
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
 interface Task {
   id: string;
@@ -34,6 +35,14 @@ interface Profile {
 interface Department {
   id: string;
   name: string;
+}
+
+interface TrackerData {
+  tasks: Task[];
+  profiles: Profile[];
+  departments: Department[];
+  teamUserIds: string[];
+  myDeptIds: string[];
 }
 
 const COLUMNS = [
@@ -72,61 +81,21 @@ const Tracker = () => {
 
   const fetchData = useCallback(async () => {
     if (!user || !role) return;
-
-    const [profilesRes, deptsRes] = await Promise.all([
-      supabase.from('profiles').select('user_id, full_name'),
-      supabase.from('departments').select('id, name'),
-    ]);
-
-    const allProfiles = profilesRes.data || [];
-    const allDepts = deptsRes.data || [];
-    setProfiles(allProfiles);
-    setDepartments(allDepts);
-
-    let tasksQuery = supabase.from('tasks').select('*').order('created_at', { ascending: false });
-
-    if (role === 'manager') {
-      // Manager: fetch tasks only in their department(s)
-      const { data: myDepts } = await supabase
-        .from('user_departments')
-        .select('department_id')
-        .eq('user_id', user.id);
-
-      const deptIds = (myDepts || []).map(d => d.department_id);
-      setMyDeptIds(deptIds);
-
-      if (deptIds.length > 0) {
-        tasksQuery = tasksQuery.in('department_id', deptIds);
-
-        // Also get team user IDs for the user filter dropdown
-        const { data: deptUsers } = await supabase
-          .from('user_departments')
-          .select('user_id')
-          .in('department_id', deptIds);
-
-        const uids = [...new Set((deptUsers || []).map(u => u.user_id))];
-        setTeamUserIds(uids);
-      }
-
-    } else if (role === 'user') {
-      // User: only sees tasks assigned to them
-      tasksQuery = tasksQuery.eq('assigned_to', user.id);
-    }
-    // Admin: no filter — sees everything
-
-    const { data: tasksData } = await tasksQuery;
-
-    const tasksList = (tasksData || []).map(t => ({
-      ...t,
-      assignee_name: allProfiles.find(p => p.user_id === t.assigned_to)?.full_name,
-    }));
-
-    setTasks(tasksList);
+    try {
+      const res = await fetch(`${API_BASE}/tracker`, { credentials: 'include' });
+      if (!res.ok) return;
+      const data: TrackerData = await res.json();
+      // Expected: { tasks, profiles, departments, teamUserIds, myDeptIds }
+      setTasks(data.tasks ?? []);
+      setProfiles(data.profiles ?? []);
+      setDepartments(data.departments ?? []);
+      setMyDeptIds(data.myDeptIds ?? []);
+      setTeamUserIds(data.teamUserIds ?? []);
+    } catch { }
   }, [user, role]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Filter tasks client-side based on search/dept/user/status dropdowns
   const filtered = tasks.filter(t => {
     if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterDept !== 'all' && t.department_id !== filterDept) return false;
@@ -149,9 +118,6 @@ const Tracker = () => {
     const task = tasks.find(t => t.id === taskId);
     if (!task || task.status === newStatus) return;
 
-    // Optimistic update
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
-
     const progressMap: Record<string, number> = {
       todo: 0,
       in_progress: 50,
@@ -159,10 +125,35 @@ const Tracker = () => {
       completed: 100,
     };
 
-    await supabase.from('tasks').update({
-      status: newStatus as any,
-      progress: progressMap[newStatus] ?? task.progress,
-    }).eq('id', taskId);
+    // Optimistic update
+    setTasks(prev => prev.map(t =>
+      t.id === taskId
+        ? { ...t, status: newStatus, progress: progressMap[newStatus] ?? t.progress }
+        : t
+    ));
+
+    try {
+      const res = await fetch(`${API_BASE}/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          status: newStatus,
+          progress: progressMap[newStatus] ?? task.progress,
+        }),
+      });
+      if (!res.ok) {
+        // Roll back on failure
+        setTasks(prev => prev.map(t =>
+          t.id === taskId ? { ...t, status: task.status, progress: task.progress } : t
+        ));
+      }
+    } catch {
+      // Roll back on error
+      setTasks(prev => prev.map(t =>
+        t.id === taskId ? { ...t, status: task.status, progress: task.progress } : t
+      ));
+    }
   };
 
   const openNew = () => {
@@ -177,10 +168,8 @@ const Tracker = () => {
     setDetailOpen(true);
   };
 
-  // Team members for the manager's user filter dropdown
   const teamProfiles = profiles.filter(p => teamUserIds.includes(p.user_id));
 
-  // Departments scoped to manager's dept(s) for display; admin sees all
   const visibleDepts = role === 'admin'
     ? departments
     : departments.filter(d => myDeptIds.includes(d.id));
@@ -199,7 +188,6 @@ const Tracker = () => {
                   : 'View and manage your assigned tasks'}
             </p>
           </div>
-          {/* Both admin and user can create tasks; manager can too */}
           <Button onClick={openNew} className="gap-2">
             <Plus className="h-4 w-4" /> New Task
           </Button>
@@ -207,7 +195,6 @@ const Tracker = () => {
 
         {/* Filters */}
         <div className="flex flex-wrap gap-3">
-          {/* Search — all roles */}
           <div className="relative w-full max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -218,7 +205,6 @@ const Tracker = () => {
             />
           </div>
 
-          {/* Department filter — admin only */}
           {role === 'admin' && (
             <Select value={filterDept} onValueChange={setFilterDept}>
               <SelectTrigger className="w-44">
@@ -233,7 +219,6 @@ const Tracker = () => {
             </Select>
           )}
 
-          {/* User filter — manager only (filters by team member) */}
           {role === 'manager' && teamProfiles.length > 0 && (
             <Select value={filterUser} onValueChange={setFilterUser}>
               <SelectTrigger className="w-44">
@@ -248,7 +233,6 @@ const Tracker = () => {
             </Select>
           )}
 
-          {/* Status filter — all roles */}
           <Select value={filterStatus} onValueChange={setFilterStatus}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="All Statuses" />

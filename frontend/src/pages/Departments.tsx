@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import AppLayout from '@/components/AppLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/hooks/use-toast';
 import { Building2, Plus, Pencil, Trash2 } from 'lucide-react';
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
 interface Department {
   id: string;
@@ -29,8 +30,13 @@ const Departments = () => {
   const [loading, setLoading] = useState(false);
 
   const fetchDepartments = async () => {
-    const { data } = await supabase.from('departments').select('*').order('name');
-    setDepartments(data || []);
+    try {
+      const res = await fetch(`${API_BASE}/departments`, { credentials: 'include' });
+      if (!res.ok) return;
+      setDepartments(await res.json());
+    } catch {
+      setDepartments([]);
+    }
   };
 
   useEffect(() => { fetchDepartments(); }, []);
@@ -53,15 +59,22 @@ const Departments = () => {
     if (!name.trim()) return;
     setLoading(true);
     try {
-      if (editDept) {
-        const { error } = await supabase.from('departments').update({ name, description }).eq('id', editDept.id);
-        if (error) throw error;
-        toast({ title: 'Department updated' });
-      } else {
-        const { error } = await supabase.from('departments').insert({ name, description });
-        if (error) throw error;
-        toast({ title: 'Department created' });
+      const url = editDept ? `${API_BASE}/departments/${editDept.id}` : `${API_BASE}/departments`;
+      const method = editDept ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ name, description }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message ?? 'Request failed');
       }
+
+      toast({ title: editDept ? 'Department updated' : 'Department created' });
       setDialogOpen(false);
       fetchDepartments();
     } catch (err: any) {
@@ -72,12 +85,19 @@ const Departments = () => {
 
   const handleDelete = async (dept: Department) => {
     if (!confirm(`Delete department "${dept.name}"?`)) return;
-    const { error } = await supabase.from('departments').delete().eq('id', dept.id);
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
+    try {
+      const res = await fetch(`${API_BASE}/departments/${dept.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message ?? 'Delete failed');
+      }
       toast({ title: 'Department deleted' });
       fetchDepartments();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
   };
 
@@ -133,7 +153,9 @@ const Departments = () => {
                 ))}
                 {departments.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center text-muted-foreground py-8">No departments yet</TableCell>
+                    <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                      No departments yet
+                    </TableCell>
                   </TableRow>
                 )}
               </TableBody>

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import AppLayout from '@/components/AppLayout';
 import UserAvatar from '@/components/UserAvatar';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,6 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/hooks/use-toast';
 import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
 type AppRole = 'admin' | 'manager' | 'user';
 
@@ -47,7 +48,6 @@ const UsersPage = () => {
   const [editUser, setEditUser] = useState<DisplayUser | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Form state
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formPassword, setFormPassword] = useState('');
@@ -55,38 +55,14 @@ const UsersPage = () => {
   const [formDept, setFormDept] = useState('');
 
   const fetchAll = async () => {
-    const [profilesRes, rolesRes, deptsRes, userDeptsRes] = await Promise.all([
-      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-      supabase.from('user_roles').select('user_id, role'),
-      supabase.from('departments').select('id, name'),
-      supabase.from('user_departments').select('user_id, department_id'),
-    ]);
-
-    const profiles = profilesRes.data || [];
-    const roles = rolesRes.data || [];
-    const depts = deptsRes.data || [];
-    const userDepts = userDeptsRes.data || [];
-
-    setDepartments(depts);
-
-    // Merge everything into one DisplayUser object per user
-    const merged: DisplayUser[] = profiles.map(p => {
-      const roleRow = roles.find(r => r.user_id === p.user_id);
-      const deptRow = userDepts.find(d => d.user_id === p.user_id);
-      const dept = depts.find(d => d.id === deptRow?.department_id);
-      return {
-        id: p.id,
-        user_id: p.user_id,
-        full_name: p.full_name,
-        email: p.email,
-        avatar_url: p.avatar_url,
-        role: (roleRow?.role as AppRole) || 'user',
-        department_id: deptRow?.department_id || '',
-        department_name: dept?.name || '',
-      };
-    });
-
-    setUsers(merged);
+    try {
+      const [usersRes, deptsRes] = await Promise.all([
+        fetch(`${API_BASE}/users`, { credentials: 'include' }),
+        fetch(`${API_BASE}/departments`, { credentials: 'include' }),
+      ]);
+      if (usersRes.ok) setUsers(await usersRes.json());
+      if (deptsRes.ok) setDepartments(await deptsRes.json());
+    } catch { }
   };
 
   useEffect(() => { fetchAll(); }, []);
@@ -115,54 +91,36 @@ const UsersPage = () => {
     setLoading(true);
     try {
       if (editUser) {
-        const deptName = departments.find(d => d.id === formDept)?.name || '';
-
-        // ── Instantly update the local state so UI reflects change right away ──
+        const res = await fetch(`${API_BASE}/users/${editUser.user_id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ full_name: formName, role: formRole, department_id: formDept }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.message ?? 'Update failed');
+        }
+        const deptName = departments.find(d => d.id === formDept)?.name ?? '';
         setUsers(prev => prev.map(u =>
           u.user_id === editUser.user_id
             ? { ...u, full_name: formName, role: formRole, department_id: formDept, department_name: deptName }
             : u
         ));
-
-        // ── Try to persist to Supabase (works when backend is ready) ──
-        await supabase.from('profiles').update({ full_name: formName }).eq('user_id', editUser.user_id);
-        await supabase.from('user_roles').upsert({ user_id: editUser.user_id, role: formRole }, { onConflict: 'user_id' });
-        if (formDept) {
-          await supabase.from('user_departments').delete().eq('user_id', editUser.user_id);
-          await supabase.from('user_departments').insert({ user_id: editUser.user_id, department_id: formDept });
-        }
-
         toast({ title: `✅ ${formName} updated to ${formRole}${deptName ? ` · ${deptName}` : ''}` });
       } else {
-        // Create new user via Supabase Auth
-        const { data, error } = await supabase.auth.signUp({
-          email: formEmail,
-          password: formPassword,
-          options: { data: { full_name: formName } },
+        const res = await fetch(`${API_BASE}/users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ full_name: formName, email: formEmail, password: formPassword, role: formRole, department_id: formDept }),
         });
-        if (error) throw error;
-
-        if (data.user) {
-          await supabase.from('user_roles').upsert({ user_id: data.user.id, role: formRole }, { onConflict: 'user_id' });
-          if (formDept) {
-            await supabase.from('user_departments').insert({ user_id: data.user.id, department_id: formDept });
-          }
-
-          // Add to local state immediately
-          const deptName = departments.find(d => d.id === formDept)?.name || '';
-          const newUser: DisplayUser = {
-            id: data.user.id,
-            user_id: data.user.id,
-            full_name: formName,
-            email: formEmail,
-            avatar_url: null,
-            role: formRole,
-            department_id: formDept,
-            department_name: deptName,
-          };
-          setUsers(prev => [newUser, ...prev]);
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.message ?? 'Create failed');
         }
-
+        const newUser: DisplayUser = await res.json();
+        setUsers(prev => [newUser, ...prev]);
         toast({ title: `✅ User ${formName} created as ${formRole}` });
       }
       setDialogOpen(false);
@@ -174,13 +132,20 @@ const UsersPage = () => {
 
   const handleDelete = async (u: DisplayUser) => {
     if (!confirm(`Delete user ${u.full_name}?`)) return;
-    // Remove from local state immediately
-    setUsers(prev => prev.filter(x => x.user_id !== u.user_id));
-    // Try Supabase delete
-    await supabase.from('user_roles').delete().eq('user_id', u.user_id);
-    await supabase.from('user_departments').delete().eq('user_id', u.user_id);
-    await supabase.from('profiles').delete().eq('user_id', u.user_id);
-    toast({ title: `🗑️ ${u.full_name} deleted` });
+    try {
+      const res = await fetch(`${API_BASE}/users/${u.user_id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message ?? 'Delete failed');
+      }
+      setUsers(prev => prev.filter(x => x.user_id !== u.user_id));
+      toast({ title: `🗑️ ${u.full_name} deleted` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
   };
 
   const filtered = users.filter(u =>
@@ -248,9 +213,7 @@ const UsersPage = () => {
                         {u.role}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {u.department_name || '—'}
-                    </TableCell>
+                    <TableCell className="text-muted-foreground">{u.department_name || '—'}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
                         <Pencil className="h-4 w-4" />
@@ -273,7 +236,6 @@ const UsersPage = () => {
           </CardContent>
         </Card>
 
-        {/* Edit / Create Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -282,30 +244,17 @@ const UsersPage = () => {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Full Name</Label>
-                <Input
-                  value={formName}
-                  onChange={e => setFormName(e.target.value)}
-                  placeholder="Juan Dela Cruz"
-                />
+                <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Juan Dela Cruz" />
               </div>
               {!editUser && (
                 <>
                   <div className="space-y-2">
                     <Label>Email</Label>
-                    <Input
-                      type="email"
-                      value={formEmail}
-                      onChange={e => setFormEmail(e.target.value)}
-                      placeholder="you@company.com"
-                    />
+                    <Input type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="you@company.com" />
                   </div>
                   <div className="space-y-2">
                     <Label>Password</Label>
-                    <Input
-                      type="password"
-                      value={formPassword}
-                      onChange={e => setFormPassword(e.target.value)}
-                    />
+                    <Input type="password" value={formPassword} onChange={e => setFormPassword(e.target.value)} />
                   </div>
                 </>
               )}
@@ -345,4 +294,4 @@ const UsersPage = () => {
   );
 };
 
-export default UsersPage; 
+export default UsersPage;

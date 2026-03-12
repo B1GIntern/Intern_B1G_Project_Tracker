@@ -2,7 +2,6 @@ import { useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { supabase } from '@/integrations/supabase/client';
 import AppLayout from '@/components/AppLayout';
 import UserAvatar from '@/components/UserAvatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,9 +12,11 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import {
-  User, Settings as SettingsIcon, Palette, Bell,
+  User, Palette, Bell,
   Upload, Save, Lock, LogOut, ShieldCheck,
 } from 'lucide-react';
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
 const ROLE_COLORS: Record<string, string> = {
   admin: 'bg-violet-100 text-violet-700 border border-violet-200',
@@ -30,20 +31,16 @@ const SettingsPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  // Derive which view to show from URL param — default to 'profile'
   const activeTab = searchParams.get('tab') === 'settings' ? 'settings' : 'profile';
 
-  // Profile state
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // Password state
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
 
-  // Notification state
   const [emailNotif, setEmailNotif] = useState(true);
   const [taskReminder, setTaskReminder] = useState(true);
   const [dueDateAlert, setDueDateAlert] = useState(true);
@@ -51,14 +48,20 @@ const SettingsPage = () => {
   const handleSaveProfile = async () => {
     if (!user) return;
     setSaving(true);
-    const { error } = await supabase
-      .from('profiles')
-      .update({ full_name: fullName })
-      .eq('user_id', user.id);
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
+    try {
+      const res = await fetch(`${API_BASE}/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ full_name: fullName }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message ?? 'Update failed');
+      }
       toast({ title: '✅ Profile updated successfully' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
     setSaving(false);
   };
@@ -66,21 +69,26 @@ const SettingsPage = () => {
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length || !user) return;
     setUploading(true);
-    const file = e.target.files[0];
-    const path = `${user.id}/${Date.now()}_${file.name}`;
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(path, file, { upsert: true });
-    if (uploadError) {
-      toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });
-      setUploading(false);
-      return;
+    try {
+      const file = e.target.files[0];
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const res = await fetch(`${API_BASE}/profile/avatar`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message ?? 'Upload failed');
+      }
+      toast({ title: '✅ Avatar updated' });
+      window.location.reload();
+    } catch (err: any) {
+      toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
     }
-    const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
-    await supabase.from('profiles').update({ avatar_url: urlData.publicUrl }).eq('user_id', user.id);
-    toast({ title: '✅ Avatar updated' });
     setUploading(false);
-    window.location.reload();
   };
 
   const handleChangePassword = async () => {
@@ -93,13 +101,22 @@ const SettingsPage = () => {
       return;
     }
     setChangingPassword(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
+    try {
+      const res = await fetch(`${API_BASE}/auth/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ password: newPassword }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message ?? 'Password change failed');
+      }
       toast({ title: '✅ Password changed successfully' });
       setNewPassword('');
       setConfirmPassword('');
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
     setChangingPassword(false);
   };
@@ -153,7 +170,7 @@ const SettingsPage = () => {
                     <p className="text-sm text-muted-foreground">{profile?.email}</p>
                     <Badge
                       variant="outline"
-                      className={`mt-1.5 capitalize text-xs font-semibold ${ROLE_COLORS[role || 'user']}`}
+                      className={`mt-1.5 capitalize text-xs font-semibold ${ROLE_COLORS[role ?? 'user']}`}
                     >
                       <ShieldCheck className="h-3 w-3 mr-1" />
                       {role}

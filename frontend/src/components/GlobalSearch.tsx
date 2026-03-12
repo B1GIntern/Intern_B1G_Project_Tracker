@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Search, ListTodo, User, Building2 } from 'lucide-react';
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
 interface SearchResult {
   type: 'task' | 'user' | 'department';
@@ -29,20 +30,18 @@ const GlobalSearch = () => {
   useEffect(() => {
     if (query.length < 2) { setResults([]); return; }
     const timer = setTimeout(async () => {
-      const q = `%${query}%`;
-      const [tasksRes, profilesRes, deptsRes] = await Promise.all([
-        supabase.from('tasks').select('id, title, status').ilike('title', q).limit(5),
-        supabase.from('profiles').select('user_id, full_name, email').ilike('full_name', q).limit(5),
-        supabase.from('departments').select('id, name').ilike('name', q).limit(5),
-      ]);
-
-      const r: SearchResult[] = [
-        ...(tasksRes.data || []).map(t => ({ type: 'task' as const, id: t.id, label: t.title, sublabel: t.status })),
-        ...(profilesRes.data || []).map(p => ({ type: 'user' as const, id: p.user_id, label: p.full_name, sublabel: p.email })),
-        ...(deptsRes.data || []).map(d => ({ type: 'department' as const, id: d.id, label: d.name })),
-      ];
-      setResults(r);
-      setOpen(r.length > 0);
+      try {
+        const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`, {
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+        if (!res.ok) throw new Error('Search failed');
+        const data: SearchResult[] = await res.json();
+        setResults(data);
+        setOpen(data.length > 0);
+      } catch {
+        setResults([]);
+      }
     }, 300);
     return () => clearTimeout(timer);
   }, [query]);

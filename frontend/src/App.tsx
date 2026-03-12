@@ -54,16 +54,13 @@ const RoleRoute = ({
 
 const AppRoutes = () => (
   <Routes>
-    {/* Public — login only, no signup */}
     <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
 
-    {/* All authenticated roles */}
     <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
     <Route path="/tracker" element={<ProtectedRoute><Tracker /></ProtectedRoute>} />
     <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
     <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
 
-    {/* Admin only */}
     <Route path="/users" element={
       <ProtectedRoute>
         <RoleRoute allowed={['admin']}>
@@ -79,7 +76,6 @@ const AppRoutes = () => (
       </ProtectedRoute>
     } />
 
-    {/* Manager only */}
     <Route path="/team" element={
       <ProtectedRoute>
         <RoleRoute allowed={['manager']}>
@@ -88,9 +84,7 @@ const AppRoutes = () => (
       </ProtectedRoute>
     } />
 
-    {/* Redirect /signup to /login in case anyone visits it directly */}
     <Route path="/signup" element={<Navigate to="/login" replace />} />
-
     <Route path="*" element={<NotFound />} />
   </Routes>
 );
