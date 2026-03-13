@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import SystemStatus from '@/components/SystemStatus';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -130,6 +131,11 @@ const Login = () => {
               Sign in with your company email and password.
             </p>
           </form>
+
+          {/* System Status */}
+          <div className="mt-8 flex justify-center">
+            <SystemStatus />
+          </div>
 
           {/* Mobile footer */}
           <p className="text-center text-xs text-gray-300 mt-10 lg:hidden">

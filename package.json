@@ -1,0 +1,20 @@
+{
+  "name": "intern-b1g-project-tracker",
+  "version": "1.0.0",
+  "description": "Full-stack project tracker with backend and frontend",
+  "scripts": {
+    "dev": "concurrently \"npm run backend:dev\" \"npm run frontend:dev\"",
+    "backend:dev": "cd backend && npm run dev",
+    "frontend:dev": "cd frontend && npm run dev",
+    "backend:build": "cd backend && npm run build",
+    "frontend:build": "cd frontend && npm run build",
+    "build": "npm run backend:build && npm run frontend:build",
+    "start": "npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["nodejs", "express", "react", "vite", "typescript"],
+  "author": "",
+  "license": "MIT"
+}
