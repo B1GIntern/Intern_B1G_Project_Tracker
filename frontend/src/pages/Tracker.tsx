@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/select';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Plus, Search } from 'lucide-react';
+import { getMockTasks, getMockProfiles, getMockDepartments, getRoleBasedIds } from '@/lib/mockData';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
@@ -81,17 +82,18 @@ const Tracker = () => {
 
   const fetchData = useCallback(async () => {
     if (!user || !role) return;
-    try {
-      const res = await fetch(`${API_BASE}/tracker`, { credentials: 'include' });
-      if (!res.ok) return;
-      const data: TrackerData = await res.json();
-      // Expected: { tasks, profiles, departments, teamUserIds, myDeptIds }
-      setTasks(data.tasks ?? []);
-      setProfiles(data.profiles ?? []);
-      setDepartments(data.departments ?? []);
-      setMyDeptIds(data.myDeptIds ?? []);
-      setTeamUserIds(data.teamUserIds ?? []);
-    } catch { }
+    
+    // Use hardcoded mock data
+    const mockTasks = getMockTasks(role);
+    const mockProfiles = getMockProfiles();
+    const mockDepartments = getMockDepartments();
+    const { myDeptIds, teamUserIds } = getRoleBasedIds(role);
+    
+    setTasks(mockTasks);
+    setProfiles(mockProfiles);
+    setDepartments(mockDepartments);
+    setMyDeptIds(myDeptIds);
+    setTeamUserIds(teamUserIds);
   }, [user, role]);
 
   useEffect(() => { fetchData(); }, [fetchData]);

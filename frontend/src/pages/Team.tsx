@@ -5,6 +5,7 @@ import UserAvatar from '@/components/UserAvatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Users } from 'lucide-react';
+import { getMockUsers, getMockDepartments } from '@/lib/mockData';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
@@ -23,16 +24,18 @@ const Team = () => {
 
   useEffect(() => {
     if (!user || role !== 'manager') return;
-    const fetchTeam = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/team`, { credentials: 'include' });
-        if (!res.ok) return;
-        setMembers(await res.json());
-      } catch {
-        setMembers([]);
-      }
-    };
-    fetchTeam();
+    // Use hardcoded mock data
+    const mockUsers = getMockUsers();
+    const mockDepartments = getMockDepartments();
+    const teamMembers = mockUsers.map(u => ({
+      user_id: u.user_id,
+      full_name: u.full_name,
+      email: u.email,
+      avatar_url: u.avatar_url,
+      role: u.role,
+      department: mockDepartments.find(d => d.id === u.department_id)?.name || 'Unknown'
+    }));
+    setMembers(teamMembers);
   }, [user, role]);
 
   if (role !== 'manager') {

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Bell, Check, Trash2, CheckCheck } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
+import { getMockNotifications } from '@/lib/mockData';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
@@ -25,13 +26,9 @@ const Notifications = () => {
 
   const fetchNotifications = async () => {
     if (!user) return;
-    try {
-      const res = await fetch(`${API_BASE}/notifications`, { credentials: 'include' });
-      if (!res.ok) return;
-      setNotifications(await res.json());
-    } catch {
-      setNotifications([]);
-    }
+    // Use hardcoded mock data
+    const mockNotifications = getMockNotifications();
+    setNotifications(mockNotifications);
   };
 
   useEffect(() => { fetchNotifications(); }, [user]);

@@ -36,24 +36,47 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!user || !role) return;
-    const fetchStats = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/dashboard/stats`, {
-          credentials: 'include',
-        });
-        if (!res.ok) throw new Error('Failed to fetch dashboard stats');
-        const data = await res.json();
-        // Expected: { stats: {...}, deptChart: [...], trendChart: [...] }
-        setStats(data.stats);
-        setDeptChart(data.deptChart ?? []);
-        setTrendChart(data.trendChart ?? []);
-      } catch {
-        // keep defaults on error
-      } finally {
-        setLoading(false);
-      }
+    
+    // Hardcoded dashboard data for demo
+    const mockStats: DashboardStats = {
+      total: role === 'admin' ? 156 : role === 'manager' ? 42 : 18,
+      inProgress: role === 'admin' ? 67 : role === 'manager' ? 23 : 8,
+      completed: role === 'admin' ? 78 : role === 'manager' ? 15 : 9,
+      departments: role === 'admin' ? 5 : 0,
+      overdue: role === 'admin' ? 8 : role === 'manager' ? 3 : 1,
+      underReview: role === 'admin' ? 12 : role === 'manager' ? 4 : 0,
     };
-    fetchStats();
+
+    const mockDeptChart = role === 'admin' ? [
+      { name: 'Engineering', tasks: 45 },
+      { name: 'Marketing', tasks: 32 },
+      { name: 'Sales', tasks: 28 },
+      { name: 'HR', tasks: 18 },
+      { name: 'Finance', tasks: 33 },
+    ] : role === 'manager' ? [
+      { name: 'In Progress', tasks: 23 },
+      { name: 'Completed', tasks: 15 },
+      { name: 'Review', tasks: 4 },
+    ] : [
+      { name: 'In Progress', tasks: 8 },
+      { name: 'Completed', tasks: 9 },
+      { name: 'Overdue', tasks: 1 },
+    ];
+
+    const mockTrendChart = [
+      { date: 'Mon', completed: 12 },
+      { date: 'Tue', completed: 15 },
+      { date: 'Wed', completed: 8 },
+      { date: 'Thu', completed: 22 },
+      { date: 'Fri', completed: 18 },
+      { date: 'Sat', completed: 6 },
+      { date: 'Sun', completed: 3 },
+    ];
+
+    setStats(mockStats);
+    setDeptChart(mockDeptChart);
+    setTrendChart(mockTrendChart);
+    setLoading(false);
   }, [user, role]);
 
   const getTitle = () => {

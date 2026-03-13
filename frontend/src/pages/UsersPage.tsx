@@ -10,8 +10,10 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/hooks/use-toast';
 import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
+import { getMockUsers, getMockDepartments } from '@/lib/mockData';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
@@ -26,6 +28,8 @@ interface DisplayUser {
   role: AppRole;
   department_id: string;
   department_name: string;
+  department_ids?: string[]; // For managers with multiple departments
+  department_names?: string[]; // For displaying multiple departments
 }
 
 interface Department {
@@ -53,16 +57,14 @@ const UsersPage = () => {
   const [formPassword, setFormPassword] = useState('');
   const [formRole, setFormRole] = useState<AppRole>('user');
   const [formDept, setFormDept] = useState('');
+  const [formDeptIds, setFormDeptIds] = useState<string[]>([]); // For multiple department selection
 
   const fetchAll = async () => {
-    try {
-      const [usersRes, deptsRes] = await Promise.all([
-        fetch(`${API_BASE}/users`, { credentials: 'include' }),
-        fetch(`${API_BASE}/departments`, { credentials: 'include' }),
-      ]);
-      if (usersRes.ok) setUsers(await usersRes.json());
-      if (deptsRes.ok) setDepartments(await deptsRes.json());
-    } catch { }
+    // Use hardcoded mock data
+    const mockUsers = getMockUsers();
+    const mockDepartments = getMockDepartments();
+    setUsers(mockUsers);
+    setDepartments(mockDepartments);
   };
 
   useEffect(() => { fetchAll(); }, []);
@@ -74,6 +76,7 @@ const UsersPage = () => {
     setFormPassword('');
     setFormRole('user');
     setFormDept('');
+    setFormDeptIds([]);
     setDialogOpen(true);
   };
 
@@ -84,42 +87,67 @@ const UsersPage = () => {
     setFormPassword('');
     setFormRole(u.role);
     setFormDept(u.department_id);
+    // Set department IDs for managers with multiple departments
+    setFormDeptIds(u.department_ids || (u.department_id ? [u.department_id] : []));
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
+    // Validation
+    if (!formName.trim()) {
+      toast({ title: 'Error', description: 'Name is required', variant: 'destructive' });
+      return;
+    }
+    if (!editUser && !formEmail.trim()) {
+      toast({ title: 'Error', description: 'Email is required', variant: 'destructive' });
+      return;
+    }
+    if (!editUser && !formPassword.trim()) {
+      toast({ title: 'Error', description: 'Password is required', variant: 'destructive' });
+      return;
+    }
+    if (formRole === 'manager' && formDeptIds.length === 0) {
+      toast({ title: 'Error', description: 'At least one department must be selected for manager role', variant: 'destructive' });
+      return;
+    }
+    
     setLoading(true);
     try {
       if (editUser) {
-        const res = await fetch(`${API_BASE}/users/${editUser.user_id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ full_name: formName, role: formRole, department_id: formDept }),
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.message ?? 'Update failed');
-        }
-        const deptName = departments.find(d => d.id === formDept)?.name ?? '';
+        // Mock update - just show success toast
+        const selectedDeptNames = formDeptIds.map(id => departments.find(d => d.id === id)?.name).filter(Boolean);
+        const deptDisplay = selectedDeptNames.length > 0 ? ` · ${selectedDeptNames.join(', ')}` : '';
+        
+        // Update user in state
         setUsers(prev => prev.map(u =>
           u.user_id === editUser.user_id
-            ? { ...u, full_name: formName, role: formRole, department_id: formDept, department_name: deptName }
+            ? { 
+                ...u, 
+                full_name: formName, 
+                role: formRole, 
+                department_id: formDeptIds[0] || '',
+                department_name: selectedDeptNames[0] || '',
+                department_ids: formDeptIds,
+                department_names: selectedDeptNames as string[]
+              }
             : u
         ));
-        toast({ title: `✅ ${formName} updated to ${formRole}${deptName ? ` · ${deptName}` : ''}` });
+        toast({ title: `✅ ${formName} updated to ${formRole}${deptDisplay}` });
       } else {
-        const res = await fetch(`${API_BASE}/users`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ full_name: formName, email: formEmail, password: formPassword, role: formRole, department_id: formDept }),
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.message ?? 'Create failed');
-        }
-        const newUser: DisplayUser = await res.json();
+        // Mock create - just show success toast
+        const selectedDeptNames = formDeptIds.map(id => departments.find(d => d.id === id)?.name).filter(Boolean);
+        const newUser: DisplayUser = {
+          id: Date.now().toString(),
+          user_id: Date.now().toString(),
+          full_name: formName,
+          email: formEmail,
+          avatar_url: null,
+          role: formRole,
+          department_id: formDeptIds[0] || '',
+          department_name: selectedDeptNames[0] || '',
+          department_ids: formDeptIds,
+          department_names: selectedDeptNames as string[]
+        };
         setUsers(prev => [newUser, ...prev]);
         toast({ title: `✅ User ${formName} created as ${formRole}` });
       }
@@ -213,7 +241,12 @@ const UsersPage = () => {
                         {u.role}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{u.department_name || '—'}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                    {u.department_names && u.department_names.length > 0 
+                      ? u.department_names.join(', ') 
+                      : u.department_name || '—'
+                    }
+                  </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
                         <Pencil className="h-4 w-4" />
@@ -270,15 +303,44 @@ const UsersPage = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Department</Label>
-                <Select value={formDept} onValueChange={setFormDept}>
-                  <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
-                  <SelectContent>
+                <Label>Department{formRole === 'manager' ? 's' : ''}</Label>
+                {formRole === 'manager' ? (
+                  <div className="space-y-2 max-h-32 overflow-y-auto border rounded-md p-3">
                     {departments.map(d => (
-                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                      <div key={d.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`dept-${d.id}`}
+                          checked={formDeptIds.includes(d.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setFormDeptIds(prev => [...prev, d.id]);
+                            } else {
+                              setFormDeptIds(prev => prev.filter(id => id !== d.id));
+                            }
+                          }}
+                        />
+                        <Label htmlFor={`dept-${d.id}`} className="text-sm font-normal cursor-pointer">
+                          {d.name}
+                        </Label>
+                      </div>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </div>
+                ) : (
+                  <Select value={formDept} onValueChange={(value) => {
+                    setFormDept(value);
+                    setFormDeptIds(value ? [value] : []);
+                  }}>
+                    <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                    <SelectContent>
+                      {departments.map(d => (
+                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {formRole === 'manager' && formDeptIds.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Select at least one department for manager role</p>
+                )}
               </div>
             </div>
             <DialogFooter>

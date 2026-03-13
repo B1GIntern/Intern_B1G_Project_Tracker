@@ -17,6 +17,28 @@ interface Profile {
   avatar_url: string | null;
 }
 
+// Hardcoded user database for demo purposes
+const HARDCODED_USERS = [
+  {
+    user: { id: '1', email: 'admin@b1g.com' },
+    profile: { id: '1', user_id: '1', full_name: 'Admin User', email: 'admin@b1g.com', avatar_url: null },
+    role: 'admin' as AppRole,
+    password: 'admin123'
+  },
+  {
+    user: { id: '2', email: 'manager@b1g.com' },
+    profile: { id: '2', user_id: '2', full_name: 'Manager User', email: 'manager@b1g.com', avatar_url: null },
+    role: 'manager' as AppRole,
+    password: 'manager123'
+  },
+  {
+    user: { id: '3', email: 'user@b1g.com' },
+    profile: { id: '3', user_id: '3', full_name: 'Regular User', email: 'user@b1g.com', avatar_url: null },
+    role: 'user' as AppRole,
+    password: 'user123'
+  }
+];
+
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
@@ -50,28 +72,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   const fetchMe = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/auth/me`, {
-        credentials: 'include',
-      });
-      if (!res.ok) {
-        setUser(null);
-        setProfile(null);
-        setRole(null);
-        return;
+    // Check for stored session in localStorage
+    const storedSession = localStorage.getItem('b1g_session');
+    if (storedSession) {
+      try {
+        const session = JSON.parse(storedSession);
+        const user = HARDCODED_USERS.find(u => u.user.id === session.userId);
+        if (user) {
+          setUser(user.user);
+          setProfile(user.profile);
+          setRole(user.role);
+        }
+      } catch {
+        localStorage.removeItem('b1g_session');
       }
-      const data = await res.json();
-      // Expected: { user: { id, email }, profile: { ... }, role: 'admin' | 'manager' | 'user' }
-      setUser(data.user);
-      setProfile(data.profile);
-      setRole(data.role ?? 'user');
-    } catch {
-      setUser(null);
-      setProfile(null);
-      setRole(null);
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -79,38 +95,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const res = await fetch(`${API_BASE}/auth/signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ email, password, fullName }),
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.message ?? 'Sign up failed');
-    }
-    await fetchMe();
+    // Hardcoded signup - simulate creating a new user
+    throw new Error('Signup disabled in demo mode. Use existing hardcoded accounts.');
   };
 
   const signIn = async (email: string, password: string) => {
-    const res = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.message ?? 'Sign in failed');
+    // Hardcoded authentication
+    const foundUser = HARDCODED_USERS.find(u => u.user.email === email && u.password === password);
+    if (!foundUser) {
+      throw new Error('Invalid email or password');
     }
-    await fetchMe();
+    
+    // Store session
+    localStorage.setItem('b1g_session', JSON.stringify({ userId: foundUser.user.id }));
+    
+    setUser(foundUser.user);
+    setProfile(foundUser.profile);
+    setRole(foundUser.role);
   };
 
   const signOut = async () => {
-    await fetch(`${API_BASE}/auth/logout`, {
-      method: 'POST',
-      credentials: 'include',
-    });
+    // Clear session
+    localStorage.removeItem('b1g_session');
     setUser(null);
     setProfile(null);
     setRole(null);
@@ -120,10 +126,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider value={{
       user,
       profile,
-      // ── DEV: overrides real API role with DEV_ROLE above ──
-      // TODO: change `DEV_ROLE` to `role` when backend is ready
-      role: DEV_ROLE,
-      // ──────────────────────────────────────────────────────
+      role,
       loading,
       signUp,
       signIn,

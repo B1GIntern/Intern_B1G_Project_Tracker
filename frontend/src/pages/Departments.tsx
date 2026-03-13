@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/hooks/use-toast';
 import { Building2, Plus, Pencil, Trash2 } from 'lucide-react';
+import { getMockDepartments } from '@/lib/mockData';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
@@ -30,13 +31,13 @@ const Departments = () => {
   const [loading, setLoading] = useState(false);
 
   const fetchDepartments = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/departments`, { credentials: 'include' });
-      if (!res.ok) return;
-      setDepartments(await res.json());
-    } catch {
-      setDepartments([]);
-    }
+    // Use hardcoded mock data
+    const mockDepartments = getMockDepartments().map((dept, index) => ({
+      ...dept,
+      description: `Description for ${dept.name} department`,
+      created_at: '2024-03-01'
+    }));
+    setDepartments(mockDepartments);
   };
 
   useEffect(() => { fetchDepartments(); }, []);

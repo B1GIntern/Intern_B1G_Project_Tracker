@@ -48,46 +48,16 @@ const SettingsPage = () => {
   const handleSaveProfile = async () => {
     if (!user) return;
     setSaving(true);
-    try {
-      const res = await fetch(`${API_BASE}/profile`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ full_name: fullName }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message ?? 'Update failed');
-      }
-      toast({ title: '✅ Profile updated successfully' });
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
-    }
+    // Mock profile update - just show success toast
+    toast({ title: '✅ Profile updated successfully (Demo Mode)' });
     setSaving(false);
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length || !user) return;
     setUploading(true);
-    try {
-      const file = e.target.files[0];
-      const formData = new FormData();
-      formData.append('avatar', file);
-
-      const res = await fetch(`${API_BASE}/profile/avatar`, {
-        method: 'POST',
-        credentials: 'include',
-        body: formData,
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message ?? 'Upload failed');
-      }
-      toast({ title: '✅ Avatar updated' });
-      window.location.reload();
-    } catch (err: any) {
-      toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
-    }
+    // Mock avatar upload - just show success toast
+    toast({ title: '✅ Avatar uploaded successfully (Demo Mode)' });
     setUploading(false);
   };
 
@@ -101,23 +71,10 @@ const SettingsPage = () => {
       return;
     }
     setChangingPassword(true);
-    try {
-      const res = await fetch(`${API_BASE}/auth/change-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ password: newPassword }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message ?? 'Password change failed');
-      }
-      toast({ title: '✅ Password changed successfully' });
-      setNewPassword('');
-      setConfirmPassword('');
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
-    }
+    // Mock password change - just show success toast
+    toast({ title: '✅ Password changed successfully (Demo Mode)' });
+    setNewPassword('');
+    setConfirmPassword('');
     setChangingPassword(false);
   };
 
