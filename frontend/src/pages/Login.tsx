@@ -129,6 +129,16 @@ const Login = () => {
             <p className="text-center text-xs text-gray-400 pt-1">
               Sign in with your company email and password.
             </p>
+
+            {/* Demo credentials */}
+            <div className="mt-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
+              <p className="text-xs font-semibold text-gray-600 mb-2">Demo Credentials:</p>
+              <div className="space-y-1 text-xs">
+                <div><span className="font-mono bg-white px-2 py-1 rounded border">admin@b1g.com</span> / <span className="font-mono bg-white px-2 py-1 rounded border">admin123</span> <span className="text-gray-500">(Admin)</span></div>
+                <div><span className="font-mono bg-white px-2 py-1 rounded border">manager@b1g.com</span> / <span className="font-mono bg-white px-2 py-1 rounded border">manager123</span> <span className="text-gray-500">(Manager)</span></div>
+                <div><span className="font-mono bg-white px-2 py-1 rounded border">user@b1g.com</span> / <span className="font-mono bg-white px-2 py-1 rounded border">user123</span> <span className="text-gray-500">(User)</span></div>
+              </div>
+            </div>
           </form>
 
           {/* Mobile footer */}
