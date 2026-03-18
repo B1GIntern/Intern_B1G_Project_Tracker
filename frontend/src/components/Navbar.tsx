@@ -61,7 +61,6 @@ const Navbar = () => {
     ] : role === 'manager' ? [
       { label: 'My Team', href: '/team', icon: Users },
     ] : []),
-    { label: 'Settings', href: '/settings', icon: Settings },
   ];
 
   return (
