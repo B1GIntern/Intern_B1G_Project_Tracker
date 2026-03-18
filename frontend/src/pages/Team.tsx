@@ -19,7 +19,7 @@ interface TeamMember {
 }
 
 const Team = () => {
-  const { user, role } = useAuth();
+  const { user, profile, role } = useAuth();
   const [members, setMembers] = useState<TeamMember[]>([]);
 
   useEffect(() => {
@@ -27,16 +27,28 @@ const Team = () => {
     // Use hardcoded mock data
     const mockUsers = getMockUsers();
     const mockDepartments = getMockDepartments();
-    const teamMembers = mockUsers.map(u => ({
-      user_id: u.user_id,
-      full_name: u.full_name,
-      email: u.email,
-      avatar_url: u.avatar_url,
-      role: u.role,
-      department: mockDepartments.find(d => d.id === u.department_id)?.name || 'Unknown'
-    }));
+    
+    // Get current manager's department
+    const currentUser = mockUsers.find(u => u.user_id === profile?.user_id);
+    const managerDepartmentId = currentUser?.department_id;
+    
+    // Filter team members: same department, exclude admins, exclude self
+    const teamMembers = mockUsers
+      .filter(u => 
+        u.department_id === managerDepartmentId && // Same department
+        u.role !== 'admin' && // Exclude admins
+        u.user_id !== profile?.user_id // Exclude self
+      )
+      .map(u => ({
+        user_id: u.user_id,
+        full_name: u.full_name,
+        email: u.email,
+        avatar_url: u.avatar_url,
+        role: u.role,
+        department: mockDepartments.find(d => d.id === u.department_id)?.name || 'Unknown'
+      }));
     setMembers(teamMembers);
-  }, [user, role]);
+  }, [user, profile, role]);
 
   if (role !== 'manager') {
     return (

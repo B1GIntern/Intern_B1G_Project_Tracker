@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/hooks/use-toast';
-import { Building2, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Building2, Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { getMockDepartments } from '@/lib/mockData';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
@@ -18,6 +18,7 @@ interface Department {
   id: string;
   name: string;
   description: string | null;
+  manager: string | null;
   created_at: string;
 }
 
@@ -29,14 +30,20 @@ const Departments = () => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deptToDelete, setDeptToDelete] = useState<Department | null>(null);
 
   const fetchDepartments = async () => {
-    // Use hardcoded mock data
-    const mockDepartments = getMockDepartments().map((dept, index) => ({
-      ...dept,
-      description: `Description for ${dept.name} department`,
-      created_at: '2024-03-01'
-    }));
+    // Use hardcoded mock data with managers
+    const mockDepartments = getMockDepartments().map((dept, index) => {
+      const managers = ['Sarah Johnson', 'Mike Chen', 'Lisa Brown', 'John Smith', 'Emily Davis'];
+      return {
+        ...dept,
+        description: `Description for ${dept.name} department`,
+        manager: managers[index % managers.length],
+        created_at: '2024-03-01'
+      };
+    });
     setDepartments(mockDepartments);
   };
 
@@ -85,9 +92,14 @@ const Departments = () => {
   };
 
   const handleDelete = async (dept: Department) => {
-    if (!confirm(`Delete department "${dept.name}"?`)) return;
+    setDeptToDelete(dept);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deptToDelete) return;
     try {
-      const res = await fetch(`${API_BASE}/departments/${dept.id}`, {
+      const res = await fetch(`${API_BASE}/departments/${deptToDelete.id}`, {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -96,6 +108,8 @@ const Departments = () => {
         throw new Error(err.message ?? 'Delete failed');
       }
       toast({ title: 'Department deleted' });
+      setDeleteDialogOpen(false);
+      setDeptToDelete(null);
       fetchDepartments();
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
@@ -129,6 +143,7 @@ const Departments = () => {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Description</TableHead>
+                  <TableHead>Managed by</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -142,6 +157,7 @@ const Departments = () => {
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{dept.description || '—'}</TableCell>
+                    <TableCell className="text-muted-foreground">{dept.manager || '—'}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" onClick={() => openEdit(dept)}>
                         <Pencil className="h-4 w-4" />
@@ -154,7 +170,7 @@ const Departments = () => {
                 ))}
                 {departments.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                       No departments yet
                     </TableCell>
                   </TableRow>
@@ -183,6 +199,37 @@ const Departments = () => {
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
               <Button onClick={handleSave} disabled={loading}>
                 {editDept ? 'Save Changes' : 'Create Department'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                Confirm Deletion
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Are you sure you want to delete department <span className="font-semibold text-foreground">{deptToDelete?.name}</span>?
+              </p>
+              <p className="text-xs text-muted-foreground">
+                This action cannot be undone. The department will be permanently removed from the system.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setDeleteDialogOpen(false);
+                setDeptToDelete(null);
+              }}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDelete}>
+                Delete Department
               </Button>
             </DialogFooter>
           </DialogContent>

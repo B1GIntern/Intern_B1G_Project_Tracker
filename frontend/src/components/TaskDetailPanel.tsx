@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { Paperclip, Download, Trash2, Upload } from 'lucide-react';
@@ -67,13 +66,12 @@ interface TaskDetailPanelProps {
 
 const TaskDetailPanel = ({ task, open, onClose, onSaved, profiles, departments, isNew }: TaskDetailPanelProps) => {
   const { user } = useAuth();
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [status, setStatus] = useState('todo');
-  const [progress, setProgress] = useState(0);
-  const [dueDate, setDueDate] = useState('');
-  const [assignedTo, setAssignedTo] = useState('');
-  const [departmentId, setDepartmentId] = useState('');
+  const [title, setTitle] = useState(task?.title ?? '');
+  const [description, setDescription] = useState(task?.description ?? '');
+  const [status, setStatus] = useState(task?.status ?? 'todo');
+  const [dueDateTime, setDueDateTime] = useState(''); // Combined date and time
+  const [assignedTo, setAssignedTo] = useState(task?.assigned_to ?? '');
+  const [departmentId, setDepartmentId] = useState(task?.department_id ?? '');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -83,8 +81,18 @@ const TaskDetailPanel = ({ task, open, onClose, onSaved, profiles, departments, 
       setTitle(task.title);
       setDescription(task.description || '');
       setStatus(task.status);
-      setProgress(task.progress);
-      setDueDate(task.due_date ? format(new Date(task.due_date), 'yyyy-MM-dd') : '');
+      if (task.due_date) {
+        const dueDateObj = new Date(task.due_date);
+        // Format for datetime-local input: YYYY-MM-DDTHH:mm
+        const year = dueDateObj.getFullYear();
+        const month = String(dueDateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(dueDateObj.getDate()).padStart(2, '0');
+        const hours = String(dueDateObj.getHours()).padStart(2, '0');
+        const minutes = String(dueDateObj.getMinutes()).padStart(2, '0');
+        setDueDateTime(`${year}-${month}-${day}T${hours}:${minutes}`);
+      } else {
+        setDueDateTime('');
+      }
       setAssignedTo(task.assigned_to || '');
       setDepartmentId(task.department_id || '');
       fetchAttachments(task.id);
@@ -92,8 +100,7 @@ const TaskDetailPanel = ({ task, open, onClose, onSaved, profiles, departments, 
       setTitle('');
       setDescription('');
       setStatus('todo');
-      setProgress(0);
-      setDueDate('');
+      setDueDateTime('');
       setAssignedTo('');
       setDepartmentId('');
       setAttachments([]);
@@ -117,12 +124,17 @@ const TaskDetailPanel = ({ task, open, onClose, onSaved, profiles, departments, 
     if (!title.trim()) return;
     setSaving(true);
     try {
+      // Convert datetime-local to ISO string
+      let dueDateTimeISO = null;
+      if (dueDateTime) {
+        dueDateTimeISO = new Date(dueDateTime).toISOString();
+      }
+
       const payload = {
         title,
         description: description || null,
         status,
-        progress,
-        due_date: dueDate ? new Date(dueDate).toISOString() : null,
+        due_date: dueDateTimeISO,
         assigned_to: assignedTo || null,
         department_id: departmentId || null,
       };
@@ -216,13 +228,9 @@ const TaskDetailPanel = ({ task, open, onClose, onSaved, profiles, departments, 
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Due Date</Label>
-              <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+              <Label>Due Date & Time</Label>
+              <Input type="datetime-local" value={dueDateTime} onChange={e => setDueDateTime(e.target.value)} />
             </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Progress: {progress}%</Label>
-            <Slider value={[progress]} onValueChange={v => setProgress(v[0])} max={100} step={5} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

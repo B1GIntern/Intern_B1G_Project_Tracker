@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/hooks/use-toast';
-import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { getMockUsers, getMockDepartments } from '@/lib/mockData';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
@@ -51,6 +51,8 @@ const UsersPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editUser, setEditUser] = useState<DisplayUser | null>(null);
   const [loading, setLoading] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<DisplayUser | null>(null);
 
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
@@ -102,12 +104,8 @@ const UsersPage = () => {
       toast({ title: 'Error', description: 'Email is required', variant: 'destructive' });
       return;
     }
-    if (!editUser && !formPassword.trim()) {
-      toast({ title: 'Error', description: 'Password is required', variant: 'destructive' });
-      return;
-    }
-    if (formRole === 'manager' && formDeptIds.length === 0) {
-      toast({ title: 'Error', description: 'At least one department must be selected for manager role', variant: 'destructive' });
+    if ((formRole === 'manager' || formRole === 'user') && formDeptIds.length === 0) {
+      toast({ title: 'Error', description: `At least one department must be selected for ${formRole} role`, variant: 'destructive' });
       return;
     }
     
@@ -149,7 +147,7 @@ const UsersPage = () => {
           department_names: selectedDeptNames as string[]
         };
         setUsers(prev => [newUser, ...prev]);
-        toast({ title: `✅ User ${formName} created as ${formRole}` });
+        toast({ title: `✅ User ${formName} created as ${formRole}`, description: 'Default password: Password123!' });
       }
       setDialogOpen(false);
     } catch (err: any) {
@@ -159,9 +157,14 @@ const UsersPage = () => {
   };
 
   const handleDelete = async (u: DisplayUser) => {
-    if (!confirm(`Delete user ${u.full_name}?`)) return;
+    setUserToDelete(u);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!userToDelete) return;
     try {
-      const res = await fetch(`${API_BASE}/users/${u.user_id}`, {
+      const res = await fetch(`${API_BASE}/users/${userToDelete.user_id}`, {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -169,8 +172,10 @@ const UsersPage = () => {
         const err = await res.json();
         throw new Error(err.message ?? 'Delete failed');
       }
-      setUsers(prev => prev.filter(x => x.user_id !== u.user_id));
-      toast({ title: `🗑️ ${u.full_name} deleted` });
+      setUsers(prev => prev.filter(x => x.user_id !== userToDelete.user_id));
+      toast({ title: `🗑️ ${userToDelete.full_name} deleted` });
+      setDeleteDialogOpen(false);
+      setUserToDelete(null);
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
@@ -242,11 +247,11 @@ const UsersPage = () => {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                    {u.department_names && u.department_names.length > 0 
-                      ? u.department_names.join(', ') 
-                      : u.department_name || '—'
-                    }
-                  </TableCell>
+                      {u.department_names && u.department_names.length > 0 
+                        ? u.department_names.join(', ') 
+                        : u.department_name || '—'
+                      }
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
                         <Pencil className="h-4 w-4" />
@@ -280,20 +285,21 @@ const UsersPage = () => {
                 <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Juan Dela Cruz" />
               </div>
               {!editUser && (
-                <>
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="you@company.com" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Password</Label>
-                    <Input type="password" value={formPassword} onChange={e => setFormPassword(e.target.value)} />
-                  </div>
-                </>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="you@company.com" />
+                  <p className="text-xs text-muted-foreground">Default password will be: password123</p>
+                </div>
               )}
               <div className="space-y-2">
                 <Label>Role</Label>
-                <Select value={formRole} onValueChange={(v: any) => setFormRole(v)}>
+                <Select value={formRole} onValueChange={(v: AppRole) => {
+                  console.log('Role changed to:', v);
+                  setFormRole(v);
+                  // Reset department selection when role changes
+                  setFormDeptIds([]);
+                  setFormDept('');
+                }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="admin">Admin</SelectItem>
@@ -303,8 +309,8 @@ const UsersPage = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Department{formRole === 'manager' ? 's' : ''}</Label>
-                {formRole === 'manager' ? (
+                <Label>Department{(formRole === 'manager' || formRole === 'user') ? 's' : ''}</Label>
+                {(formRole === 'manager' || formRole === 'user') ? (
                   <div className="space-y-2 max-h-32 overflow-y-auto border rounded-md p-3">
                     {departments.map(d => (
                       <div key={d.id} className="flex items-center space-x-2">
@@ -312,6 +318,7 @@ const UsersPage = () => {
                           id={`dept-${d.id}`}
                           checked={formDeptIds.includes(d.id)}
                           onCheckedChange={(checked) => {
+                            console.log('Checkbox changed:', d.id, checked);
                             if (checked) {
                               setFormDeptIds(prev => [...prev, d.id]);
                             } else {
@@ -338,8 +345,8 @@ const UsersPage = () => {
                     </SelectContent>
                   </Select>
                 )}
-                {formRole === 'manager' && formDeptIds.length === 0 && (
-                  <p className="text-xs text-muted-foreground">Select at least one department for manager role</p>
+                {(formRole === 'manager' || formRole === 'user') && formDeptIds.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Select at least one department for {formRole} role</p>
                 )}
               </div>
             </div>
@@ -347,6 +354,37 @@ const UsersPage = () => {
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
               <Button onClick={handleSave} disabled={loading}>
                 {editUser ? 'Save Changes' : 'Create User'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                Confirm Deletion
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Are you sure you want to delete user <span className="font-semibold text-foreground">{userToDelete?.full_name}</span>?
+              </p>
+              <p className="text-xs text-muted-foreground">
+                This action cannot be undone. The user will be permanently removed from the system.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setDeleteDialogOpen(false);
+                setUserToDelete(null);
+              }}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDelete}>
+                Delete User
               </Button>
             </DialogFooter>
           </DialogContent>

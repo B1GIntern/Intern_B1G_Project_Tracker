@@ -10,8 +10,15 @@
       ]
     },
     "skipLibCheck": true,
-    "strictNullChecks": false
+    "strictNullChecks": false,
+    "disableSourceOfProjectReferenceRedirect": true,
+    "composite": false
   },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build"
+  ],
   "files": [],
   "references": [
     {

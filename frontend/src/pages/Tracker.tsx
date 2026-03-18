@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import AppLayout from '@/components/AppLayout';
 import TaskCard from '@/components/TaskCard';
 import TaskDetailPanel from '@/components/TaskDetailPanel';
@@ -61,10 +62,13 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'approved', label: 'Approved' },
   { value: 'declined', label: 'Declined' },
   { value: 'completed', label: 'Completed' },
+  { value: 'overdue', label: 'Overdue' },
 ];
 
 const Tracker = () => {
   const { user, role } = useAuth();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -98,11 +102,24 @@ const Tracker = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Handle URL filter parameter for overdue tasks
+  useEffect(() => {
+    const filterParam = searchParams.get('filter');
+    if (filterParam === 'overdue') {
+      setFilterStatus('overdue');
+    }
+  }, [searchParams]);
+
   const filtered = tasks.filter(t => {
     if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterDept !== 'all' && t.department_id !== filterDept) return false;
     if (filterUser !== 'all' && t.assigned_to !== filterUser) return false;
     if (filterStatus !== 'all' && t.status !== filterStatus) return false;
+    // Special handling for overdue filter
+    if (filterStatus === 'overdue') {
+      const isOverdue = t.due_date && new Date(t.due_date) < new Date() && t.status !== 'completed';
+      return isOverdue;
+    }
     return true;
   });
 
@@ -176,6 +193,24 @@ const Tracker = () => {
     ? departments
     : departments.filter(d => myDeptIds.includes(d.id));
 
+  const getDeadlineText = () => {
+    const now = new Date();
+    const deadline = new Date(now);
+    deadline.setDate(deadline.getDate() + 14); // Set deadline 14 days from now
+    deadline.setHours(23, 59, 0, 0); // Set to 11:59 PM
+    
+    const options: Intl.DateTimeFormatOptions = {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    };
+    
+    return deadline.toLocaleString('en-US', options);
+  };
+
   return (
     <AppLayout>
       <div className="space-y-4 animate-fade-in">
@@ -183,11 +218,13 @@ const Tracker = () => {
           <div>
             <h1 className="text-2xl font-display font-bold">Task Tracker</h1>
             <p className="text-muted-foreground text-sm">
-              {role === 'admin'
-                ? 'View and manage all tasks across all departments'
-                : role === 'manager'
-                  ? 'Manage your department tasks and team workload'
-                  : 'View and manage your assigned tasks'}
+              {filterStatus === 'overdue' 
+                ? 'Showing overdue tasks only'
+                : role === 'admin'
+                  ? 'View and manage all tasks across all departments'
+                  : role === 'manager'
+                    ? 'Manage your department tasks and team workload'
+                    : 'View and manage your assigned tasks'}
             </p>
           </div>
           <Button onClick={openNew} className="gap-2">

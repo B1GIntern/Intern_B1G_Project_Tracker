@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import AppLayout from '@/components/AppLayout';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Bell, Check, Trash2, CheckCheck } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
+import { Bell, Check, X, BellRing } from 'lucide-react';
 import { getMockNotifications } from '@/lib/mockData';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
@@ -14,20 +13,27 @@ interface Notification {
   id: string;
   title: string;
   message: string;
-  type: string;
+  type: 'info' | 'success' | 'warning' | 'error';
   read: boolean;
   created_at: string;
-  task_id: string | null;
+  task_id?: string;
 }
 
-const Notifications = () => {
+interface NotificationsDropdownProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const NotificationsDropdown = ({ isOpen, onClose }: NotificationsDropdownProps) => {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const fetchNotifications = async () => {
-    if (!user) return;
     // Use hardcoded mock data
-    const mockNotifications = getMockNotifications();
+    const mockNotifications = getMockNotifications().map(n => ({
+      ...n,
+      type: n.type as 'info' | 'success' | 'warning' | 'error'
+    }));
     setNotifications(mockNotifications);
   };
 
@@ -56,84 +62,115 @@ const Notifications = () => {
     } catch { }
   };
 
-  const deleteNotification = async (id: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/notifications/${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      if (!res.ok) return;
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    } catch { }
-  };
-
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const typeColorMap: Record<string, string> = {
-    task_assigned: 'bg-info/10 text-info',
-    task_due: 'bg-warning/10 text-warning',
-    task_overdue: 'bg-destructive/10 text-destructive',
-    task_approved: 'bg-success/10 text-success',
-    task_declined: 'bg-destructive/10 text-destructive',
-    info: 'bg-muted text-muted-foreground',
+  const typeColorMap: Record<string, { light: string; dark: string }> = {
+    info: { 
+      light: 'bg-blue-100 text-blue-700 border border-blue-200',
+      dark: 'bg-blue-900/30 text-blue-300 border border-blue-800'
+    },
+    success: { 
+      light: 'bg-green-100 text-green-700 border border-green-200',
+      dark: 'bg-green-900/30 text-green-300 border border-green-800'
+    },
+    warning: { 
+      light: 'bg-yellow-100 text-yellow-700 border border-yellow-200',
+      dark: 'bg-yellow-900/30 text-yellow-300 border border-yellow-800'
+    },
+    error: { 
+      light: 'bg-red-100 text-red-700 border border-red-200',
+      dark: 'bg-red-900/30 text-red-300 border border-red-800'
+    },
   };
 
+  const typeIconMap: Record<string, string> = {
+    info: '📝',
+    success: '✅',
+    warning: '⚠️',
+    error: '❌',
+  };
+
+  if (!isOpen) return null;
+
   return (
-    <AppLayout>
-      <div className="space-y-6 animate-fade-in max-w-2xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-display font-bold">Notifications</h1>
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div className="absolute top-16 right-4 w-96 max-h-96 bg-background rounded-lg shadow-lg border border-border overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <BellRing className="h-5 w-5 text-primary" />
+            <h3 className="font-semibold">Notifications</h3>
             {unreadCount > 0 && (
-              <p className="text-sm text-muted-foreground">{unreadCount} unread</p>
+              <Badge variant="destructive" className="text-xs">
+                {unreadCount}
+              </Badge>
             )}
           </div>
-          {unreadCount > 0 && (
-            <Button variant="outline" size="sm" onClick={markAllRead} className="gap-2">
-              <CheckCheck className="h-4 w-4" /> Mark All Read
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <Button variant="ghost" size="sm" onClick={markAllRead} className="text-xs">
+                Mark all read
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" onClick={onClose} className="h-6 w-6">
+              <X className="h-4 w-4" />
             </Button>
-          )}
+          </div>
         </div>
 
-        <div className="space-y-2">
-          {notifications.map(n => (
-            <Card key={n.id} className={`border-border/50 transition-colors ${!n.read ? 'bg-accent/20' : ''}`}>
-              <CardContent className="p-4 flex items-start gap-3">
-                <div className={`mt-0.5 rounded-full p-1.5 ${typeColorMap[n.type] ?? typeColorMap.info}`}>
-                  <Bell className="h-3.5 w-3.5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm">{n.title}</p>
-                  <p className="text-sm text-muted-foreground">{n.message}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
-                  </p>
-                </div>
-                <div className="flex gap-1 shrink-0">
-                  {!n.read && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => markRead(n.id)}>
-                      <Check className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => deleteNotification(n.id)}>
-                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-          {notifications.length === 0 && (
-            <Card className="border-border/50">
-              <CardContent className="py-12 text-center text-muted-foreground">
-                <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>No notifications yet</p>
-              </CardContent>
-            </Card>
+        {/* Notifications List */}
+        <div className="max-h-80 overflow-y-auto">
+          {notifications.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">
+              <Bell className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p>No notifications yet</p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {notifications.map(n => (
+                <Card key={n.id} className={`border-0 rounded-none shadow-none ${!n.read ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''}`}>
+                  <CardContent className="p-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 mt-1">
+                        <span className="text-lg">{typeIconMap[n.type] || '📝'}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <h4 className={`text-sm font-medium truncate ${!n.read ? 'text-blue-700 dark:text-blue-300' : 'text-foreground'}`}>
+                            {n.title}
+                          </h4>
+                          {!n.read && (
+                            <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{n.message}</p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(n.created_at).toLocaleDateString()}
+                          </p>
+                          {!n.read && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => markRead(n.id)}
+                              className="h-6 w-6 p-0 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                            >
+                              <Check className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           )}
         </div>
       </div>
-    </AppLayout>
+    </div>
   );
 };
 
-export default Notifications;
+// Export as default for use in components
+export default NotificationsDropdown;
