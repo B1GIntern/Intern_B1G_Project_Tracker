@@ -20,6 +20,20 @@ interface TaskCardProps {
 const TaskCard = ({ task, onClick }: TaskCardProps) => {
   const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'completed';
 
+  // Format due date with time if available
+  const formatDueDate = (dueDate: string) => {
+    const date = new Date(dueDate);
+    const hasTime = date.getHours() !== 0 || date.getMinutes() !== 0;
+    
+    if (hasTime) {
+      // Show full date with time
+      return format(date, 'MMM d, h:mm a');
+    } else {
+      // Show just the date
+      return format(date, 'MMM d');
+    }
+  };
+
   return (
     <div
       onClick={onClick}
@@ -35,7 +49,7 @@ const TaskCard = ({ task, onClick }: TaskCardProps) => {
         {task.due_date && (
           <div className={`flex items-center gap-1 ${isOverdue ? 'text-destructive' : ''}`}>
             <Calendar className="h-3 w-3" />
-            {format(new Date(task.due_date), 'MMM d')}
+            {formatDueDate(task.due_date)}
           </div>
         )}
       </div>

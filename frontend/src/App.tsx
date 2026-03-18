@@ -12,7 +12,6 @@ import UsersPage from "./pages/UsersPage";
 import Departments from "./pages/Departments";
 import Team from "./pages/Team";
 import SettingsPage from "./pages/SettingsPage";
-import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -59,7 +58,6 @@ const AppRoutes = () => (
     <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
     <Route path="/tracker" element={<ProtectedRoute><Tracker /></ProtectedRoute>} />
     <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-    <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
 
     <Route path="/users" element={
       <ProtectedRoute>

@@ -17,6 +17,8 @@ import {
   Bell, LogOut, Settings, User, Sun, Moon,
   LayoutDashboard, Users, Building2, ListTodo, Menu, X,
 } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
+import NotificationsDropdown from '@/pages/Notifications';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
@@ -27,6 +29,7 @@ const Navbar = () => {
   const location = useLocation();
   const [unreadCount, setUnreadCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   useEffect(() => {
     const fetchUnread = async () => {
@@ -55,11 +58,9 @@ const Navbar = () => {
     ...(role === 'admin' ? [
       { label: 'Users', href: '/users', icon: Users },
       { label: 'Departments', href: '/departments', icon: Building2 },
-    ] : []),
-    ...(role === 'manager' ? [
+    ] : role === 'manager' ? [
       { label: 'My Team', href: '/team', icon: Users },
     ] : []),
-    { label: 'Settings', href: '/settings', icon: Settings },
   ];
 
   return (
@@ -83,10 +84,11 @@ const Navbar = () => {
               <Link
                 key={item.href}
                 to={item.href}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${location.pathname === item.href
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  location.pathname === item.href
                     ? 'bg-accent text-accent-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  }`}
+                }`}
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
@@ -104,17 +106,20 @@ const Navbar = () => {
               {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
             </Button>
 
-            <Link to="/notifications" className="relative">
-              <Button variant="ghost" size="icon" className="text-muted-foreground">
-                <Bell className="h-4 w-4" />
-                {unreadCount > 0 && (
-                  <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px]">
-                    {unreadCount}
-                  </Badge>
-                )}
-              </Button>
-            </Link>
+            {/* Bell Button — triggers NotificationsDropdown */}
+            <button
+              className="relative flex items-center gap-2 rounded-lg p-1 hover:bg-muted transition-colors"
+              onClick={() => setNotificationsOpen(!notificationsOpen)}
+            >
+              <Bell className="h-4 w-4 text-muted-foreground" />
+              {unreadCount > 0 && (
+                <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px]">
+                  {unreadCount}
+                </Badge>
+              )}
+            </button>
 
+            {/* User Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-2 rounded-lg p-1 hover:bg-muted transition-colors">
@@ -164,10 +169,11 @@ const Navbar = () => {
                 key={item.href}
                 to={item.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${location.pathname === item.href
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  location.pathname === item.href
                     ? 'bg-accent text-accent-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  }`}
+                }`}
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
@@ -176,6 +182,12 @@ const Navbar = () => {
           </div>
         )}
       </div>
+
+      {/* Notifications Dropdown — uses isOpen/onClose from Notifications.tsx */}
+      <NotificationsDropdown
+        isOpen={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+      />
     </nav>
   );
 };
