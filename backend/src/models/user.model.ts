@@ -21,8 +21,8 @@ export interface Profile {
 }
 
 // ─── ROLE ─────────────────────────────────────────────────────────────────────
-// The 3 roles in the system
-export type AppRole = 'admin' | 'manager' | 'user';
+// Role is now dynamic - retrieved from database
+export type AppRole = string;
 
 // Matches the `user_roles` table
 export interface UserRole {

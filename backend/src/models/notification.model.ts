@@ -1,12 +1,6 @@
 // ─── NOTIFICATION TYPE ────────────────────────────────────────────────────────
-// The types of notifications the system can create
-export type NotifType =
-    | 'task_assigned'
-    | 'task_due'
-    | 'task_overdue'
-    | 'task_approved'
-    | 'task_declined'
-    | 'info';
+// Notification type is now dynamic - retrieved from database
+export type NotifType = string;
 
 // ─── NOTIFICATION ─────────────────────────────────────────────────────────────
 // Matches the `notifications` table

@@ -72,19 +72,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   const fetchMe = async () => {
-    // Check for stored session in localStorage
-    const storedSession = localStorage.getItem('b1g_session');
-    if (storedSession) {
+    // Check for stored token in localStorage
+    const token = localStorage.getItem('b1g_token');
+    const storedUser = localStorage.getItem('b1g_user');
+    
+    if (token && storedUser) {
       try {
-        const session = JSON.parse(storedSession);
-        const user = HARDCODED_USERS.find(u => u.user.id === session.userId);
-        if (user) {
-          setUser(user.user);
-          setProfile(user.profile);
-          setRole(user.role);
-        }
+        const user = JSON.parse(storedUser);
+        setUser({ id: user.user_id, email: user.email });
+        setProfile({ 
+          id: user.user_id, 
+          user_id: user.user_id, 
+          full_name: user.full_name, 
+          email: user.email, 
+          avatar_url: user.avatar_url 
+        });
+        setRole(user.role);
       } catch {
-        localStorage.removeItem('b1g_session');
+        localStorage.removeItem('b1g_token');
+        localStorage.removeItem('b1g_user');
       }
     }
     setLoading(false);
@@ -100,23 +106,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signIn = async (email: string, password: string) => {
-    // Hardcoded authentication
-    const foundUser = HARDCODED_USERS.find(u => u.user.email === email && u.password === password);
-    if (!foundUser) {
-      throw new Error('Invalid email or password');
+    try {
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Invalid email or password');
+      }
+
+      // Store token and user data
+      localStorage.setItem('b1g_token', data.data.token);
+      localStorage.setItem('b1g_user', JSON.stringify(data.data.user));
+      
+      setUser({ id: data.data.user.user_id, email: data.data.user.email });
+      setProfile({ 
+        id: data.data.user.user_id, 
+        user_id: data.data.user.user_id, 
+        full_name: data.data.user.full_name, 
+        email: data.data.user.email, 
+        avatar_url: data.data.user.avatar_url 
+      });
+      setRole(data.data.user.role);
+    } catch (error: any) {
+      throw new Error(error.message || 'Login failed');
     }
-    
-    // Store session
-    localStorage.setItem('b1g_session', JSON.stringify({ userId: foundUser.user.id }));
-    
-    setUser(foundUser.user);
-    setProfile(foundUser.profile);
-    setRole(foundUser.role);
   };
 
   const signOut = async () => {
     // Clear session
-    localStorage.removeItem('b1g_session');
+    localStorage.removeItem('b1g_token');
+    localStorage.removeItem('b1g_user');
     setUser(null);
     setProfile(null);
     setRole(null);

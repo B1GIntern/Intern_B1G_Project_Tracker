@@ -1,4 +1,4 @@
-import { db } from '../config/db';
+import { db, isSupabase } from '../config/db';
 import { Department, DepartmentStats, CreateDepartmentBody, UpdateDepartmentBody } from '../models/department.model';
 
 export const departmentService = {

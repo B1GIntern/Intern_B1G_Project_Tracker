@@ -1,4 +1,4 @@
-import { db } from '../config/db';
+import { db, isSupabase } from '../config/db';
 import { Task, TaskAttachment, CreateTaskBody, UpdateTaskBody } from '../models/task.model';
 import { DisplayUser } from '../models/user.model';
 import { Department } from '../models/department.model';
@@ -80,8 +80,8 @@ export const taskService = {
                 [
                     body.title,
                     body.description ?? null,
-                    body.status ?? 'todo',
-                    body.progress ?? 0,
+                    body.status ?? null,
+                    body.progress ?? null,
                     body.due_date ?? null,
                     body.assigned_to ?? null,
                     createdBy,
@@ -95,10 +95,12 @@ export const taskService = {
             if (task.assigned_to) {
                 await client.query(
                     `INSERT INTO notifications (user_id, title, message, type, task_id)
-           VALUES ($1, 'New Task Assigned', $2, 'task_assigned', $3)`,
+           VALUES ($1, $2, $3, $4, $5)`,
                     [
                         task.assigned_to,
+                        'New Task Assigned',
                         `You have been assigned a new task: "${task.title}"`,
+                        'task_assigned',
                         task.id,
                     ]
                 );

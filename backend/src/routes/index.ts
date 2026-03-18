@@ -5,6 +5,8 @@ import userRoutes from './user.routes';
 import departmentRoutes from './department.routes';
 import notificationRoutes from './notification.routes';
 import statusRoutes from './status.routes';
+import dataRoutes from './data.routes';
+import seedRoutes from './seed.routes';
 
 const router = Router();
 
@@ -15,5 +17,7 @@ router.use('/users', userRoutes);
 router.use('/departments', departmentRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/status', statusRoutes);
+router.use('/data', dataRoutes);
+router.use('/seed', seedRoutes);
 
 export default router;

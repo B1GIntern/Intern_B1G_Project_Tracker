@@ -13,6 +13,10 @@ export const env = {
     // Database pool settings for Supabase
     DB_POOL_MIN: process.env.DB_POOL_MIN || '2',
     DB_POOL_MAX: process.env.DB_POOL_MAX || '10',
+    // Supabase configuration
+    SUPABASE_URL: process.env.SUPABASE_URL || '',
+    SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
     // Additional frontend URLs for development
     ALLOWED_ORIGINS: [
         'http://localhost:5173',  // Vite default
