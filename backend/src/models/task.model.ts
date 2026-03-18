@@ -1,12 +1,6 @@
 // ─── TASK STATUS ──────────────────────────────────────────────────────────────
-// The 6 possible statuses for a task — maps to Kanban columns
-export type TaskStatus =
-    | 'todo'
-    | 'in_progress'
-    | 'under_review'
-    | 'approved'
-    | 'declined'
-    | 'completed';
+// Task status is now dynamic - retrieved from database
+export type TaskStatus = string;
 
 // ─── TASK ─────────────────────────────────────────────────────────────────────
 // Matches the `tasks` table

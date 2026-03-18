@@ -9,12 +9,24 @@
     "backend:build": "cd backend && npm run build",
     "frontend:build": "cd frontend && npm run build",
     "build": "npm run backend:build && npm run frontend:build",
-    "start": "npm run dev"
+    "start": "npm run dev",
+    "deploy:vercel": "npm run build && vercel --prod",
+    "deploy:railway": "npm run build && railway deploy",
+    "deploy:render": "npm run build && render deploy"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
   },
-  "keywords": ["nodejs", "express", "react", "vite", "typescript"],
+  "keywords": [
+    "nodejs",
+    "express",
+    "react",
+    "vite",
+    "typescript"
+  ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.99.1"
+  }
 }

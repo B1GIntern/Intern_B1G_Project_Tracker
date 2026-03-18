@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { db } from '../config/db';
+import { db, isSupabase } from '../config/db';
 import { DisplayUser, TeamMember, AppRole } from '../models/user.model';
 
 export const userService = {

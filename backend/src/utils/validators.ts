@@ -27,9 +27,9 @@ export const getMissingField = (
 };
 
 // ─── ROLE ─────────────────────────────────────────────────────────────────────
-// Checks if the provided role is one of the 3 valid app roles
+// Role validation - now accepts any string value
 export const isValidRole = (role: string): boolean => {
-    return ['admin', 'manager', 'user'].includes(role);
+    return role && role.trim().length > 0;
 };
 
 // ─── UUID ─────────────────────────────────────────────────────────────────────
