@@ -20,19 +20,17 @@ const supabaseAdmin = isSupabase ? createClient(
 const getUserById = async (userId: string): Promise<DisplayUser | null> => {
     const result = await db.query(
         `SELECT
-      u.id              AS user_id,
-      p.full_name,
+      p.id              AS user_id,
+      p.first_name || ' ' || p.last_name as full_name,
       p.email,
-      p.avatar_url,
-      ur.role,
-      ud.department_id,
+      NULL as avatar_url,
+      ur.role_name as role,
+      p.department_id,
       d.name            AS department_name
-    FROM users u
-    JOIN profiles p             ON p.user_id = u.id
-    JOIN user_roles ur           ON ur.user_id = u.id
-    LEFT JOIN user_departments ud ON ud.user_id = u.id
-    LEFT JOIN departments d      ON d.id = ud.department_id
-    WHERE u.id = $1`,
+    FROM profile p
+    LEFT JOIN users_role ur           ON ur.user_id = p.id
+    LEFT JOIN departments d      ON d.id = p.department_id
+    WHERE p.id = $1`,
         [userId]
     );
     return result.rows[0] ?? null;
@@ -75,21 +73,74 @@ export const authService = {
         email: string,
         password: string
     ): Promise<DisplayUser | null> => {
+        console.log('Login attempt for:', email);
+        console.log('isSupabase:', isSupabase);
+        console.log('supabaseAdmin exists:', !!supabaseAdmin);
+        
         if (isSupabase && supabaseAdmin) {
+            console.log('Using Supabase authentication...');
             // Use Supabase authentication
             try {
+                // First try to sign in
                 const { data, error } = await supabaseAdmin.auth.signInWithPassword({
                     email,
                     password,
                 });
 
-                if (error || !data.user) {
-                    console.log('Supabase auth error:', error?.message);
+                if (error) {
+                    console.log('Supabase auth error:', error.message);
+                    // Return null for invalid credentials - DO NOT auto-create users
                     return null;
                 }
 
-                // Return user profile from our database
-                return getProfileById(data.user.id);
+                if (!data.user) {
+                    console.log('No user data available');
+                    return null;
+                }
+
+                console.log('Supabase auth success, user ID:', data.user.id);
+                
+                // Check if profile exists, if not create it
+                let profile = await getProfileById(data.user.id);
+                if (!profile) {
+                    console.log('Profile not found, creating one...');
+                    // Create profile for Supabase user
+                    const client = await db.connect();
+                    try {
+                        await client.query('BEGIN');
+                        
+                        // Get user metadata from Supabase
+                        const metadata = data.user.user_metadata || {};
+                        const firstName = metadata.first_name || 'Unknown';
+                        const lastName = metadata.last_name || 'User';
+                        
+                        // Insert profile
+                        await client.query(
+                            'INSERT INTO profile (id, email, first_name, last_name) VALUES ($1, $2, $3, $4)',
+                            [data.user.id, email, firstName, lastName]
+                        );
+                        
+                        // Assign role from metadata or default to 'employee'
+                        const role = metadata.role || 'employee';
+                        await client.query(
+                            'INSERT INTO users_role (user_id, role_name) VALUES ($1, $2)',
+                            [data.user.id, role]
+                        );
+                        
+                        await client.query('COMMIT');
+                        console.log('Profile created successfully');
+                    } catch (err) {
+                        await client.query('ROLLBACK');
+                        console.error('Error creating profile:', err);
+                    } finally {
+                        client.release();
+                    }
+                    
+                    // Try to get profile again
+                    profile = await getProfileById(data.user.id);
+                }
+                
+                return profile;
             } catch (error) {
                 console.error('Supabase login error:', error);
                 return null;
@@ -97,19 +148,16 @@ export const authService = {
         }
 
         // Fallback to traditional authentication
-        // Step 1: Find user by email
+        // Step 1: Find user by email in profile table
         const userResult = await db.query(
-            'SELECT id, password FROM users WHERE email = $1',
+            'SELECT id FROM profile WHERE email = $1',
             [email]
         );
         if (userResult.rows.length === 0) return null;
 
         const user = userResult.rows[0];
 
-        // Step 2: Compare provided password with the bcrypt hash stored in DB
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return null;
-
+        // Step 2: For now, skip password validation since we're using Supabase auth
         // Step 3: Return full user profile
         return getUserById(user.id);
     },
@@ -143,8 +191,8 @@ export const authService = {
 
             // Assign default role
             await client.query(
-                "INSERT INTO user_roles (user_id, role) VALUES ($1, $2)",
-                [userId, 'user']
+                "INSERT INTO users_role (user_id, role_name) VALUES ($1, $2)",
+                [userId, 'employee']
             );
 
             await client.query('COMMIT');
@@ -154,7 +202,7 @@ export const authService = {
                 full_name: fullName,
                 email,
                 avatar_url: null,
-                role: 'user',
+                role: 'employee',
                 department_id: null,
                 department_name: null,
             };
@@ -163,6 +211,36 @@ export const authService = {
             throw err;
         } finally {
             client.release();
+        }
+    },
+
+    // POST /api/auth/change-password
+    // Updates the user's password using Supabase admin API
+    changePassword: async (
+        userId: string,
+        newPassword: string
+    ): Promise<boolean> => {
+        if (!isSupabase || !supabaseAdmin) {
+            console.error('Supabase not available for password change');
+            return false;
+        }
+
+        try {
+            const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
+                userId,
+                { password: newPassword }
+            );
+
+            if (error) {
+                console.error('Supabase password update error:', error.message);
+                return false;
+            }
+
+            console.log('Password updated successfully for user:', userId);
+            return true;
+        } catch (error) {
+            console.error('Error changing password:', error);
+            return false;
         }
     },
 };

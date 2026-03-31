@@ -35,7 +35,7 @@ router.post('/admin', async (req, res) => {
             });
         }
 
-        const existingAdmin = existingUsers.users.find(u => u.email === 'admin@b1g.com');
+        const existingAdmin = existingUsers.users.find((u: any) => u.email === 'admin@b1g.com');
         
         if (existingAdmin) {
             userId = existingAdmin.id;
@@ -182,6 +182,70 @@ router.get('/status', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to check status',
+            error: error.message
+        });
+    }
+});
+
+// POST /api/seed/test-task - Create a test task
+router.post('/test-task', async (req, res) => {
+    try {
+        console.log('🔧 Creating test task...');
+
+        // Get admin user ID
+        const adminResult = await db.query(
+            `SELECT p.id FROM profile p 
+             LEFT JOIN users_role ur ON p.id = ur.user_id 
+             WHERE p.email = $1 AND ur.role_name = $2`,
+            ['admin@b1g.com', 'admin']
+        );
+
+        if (adminResult.rows.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Admin user not found'
+            });
+        }
+
+        const adminId = adminResult.rows[0].id;
+
+        // Get any department or use null
+        const deptResult = await db.query(
+            'SELECT id FROM departments LIMIT 1'
+        );
+
+        const deptId = deptResult.rows.length > 0 ? deptResult.rows[0].id : null;
+
+        // Create a test task
+        const taskResult = await db.query(
+            `INSERT INTO tracker_tasks 
+             (title, description, status, assigned_to, created_by, department_id, due_date, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+             RETURNING *`,
+            [
+                'Test3',
+                'This is a test task for dashboard verification',
+                'todo',
+                adminId,
+                adminId,
+                deptId,
+                new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // Due in 7 days
+            ]
+        );
+
+        console.log('✅ Test task created successfully!');
+
+        res.json({
+            success: true,
+            message: 'Test task created successfully',
+            task: taskResult.rows[0]
+        });
+
+    } catch (error: any) {
+        console.error('❌ Seed test task failed:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create test task',
             error: error.message
         });
     }

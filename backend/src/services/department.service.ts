@@ -107,8 +107,8 @@ export const departmentService = {
     // Admin creates a new department
     createDepartment: async (body: CreateDepartmentBody): Promise<Department> => {
         const result = await db.query(
-            'INSERT INTO departments (name, description) VALUES ($1, $2) RETURNING *',
-            [body.name, body.description ?? null]
+            'INSERT INTO departments (name, description, manage_by) VALUES ($1, $2, $3) RETURNING *',
+            [body.name, body.description ?? null, body.manage_by ?? null]
         );
         return result.rows[0];
     },
@@ -125,6 +125,7 @@ export const departmentService = {
 
         if (body.name !== undefined) { fields.push(`name = $${idx++}`); values.push(body.name); }
         if (body.description !== undefined) { fields.push(`description = $${idx++}`); values.push(body.description); }
+        if (body.manage_by !== undefined) { fields.push(`manage_by = $${idx++}`); values.push(body.manage_by); }
 
         if (fields.length === 0) return null;
 

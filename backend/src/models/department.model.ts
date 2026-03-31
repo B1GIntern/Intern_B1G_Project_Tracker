@@ -4,6 +4,7 @@ export interface Department {
     id: string;
     name: string;
     description: string | null;
+    manage_by: string | null;
     created_at: Date;
     updated_at: Date;
 }
@@ -24,6 +25,7 @@ export interface DepartmentStats {
 export interface CreateDepartmentBody {
     name: string;
     description?: string;
+    manage_by?: string;
 }
 
 // Shape of the request body when updating a department (all fields optional)

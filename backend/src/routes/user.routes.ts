@@ -12,6 +12,9 @@ router.use(requireAuth);
 // Must be defined BEFORE /:user_id to avoid route conflict
 router.get('/team', userController.getTeam);
 
+// PUT /api/users/profile → update own profile (for all authenticated users)
+router.put('/profile', userController.updateProfile);
+
 // User management — admin only
 // GET    /api/users
 // POST   /api/users

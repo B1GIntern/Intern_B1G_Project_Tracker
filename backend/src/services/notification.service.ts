@@ -3,6 +3,17 @@ import { Notification, SearchResult } from '../models/notification.model';
 
 export const notificationService = {
 
+    // CREATE - Add a new notification
+    createNotification: async (userId: string, title: string, message: string, type: string, taskId?: string): Promise<Notification> => {
+        const result = await db.query(
+            `INSERT INTO notifications (user_id, title, message, type, task_id, read, created_at)
+             VALUES ($1, $2, $3, $4, $5, false, NOW())
+             RETURNING *`,
+            [userId, title, message, type, taskId || null]
+        );
+        return result.rows[0];
+    },
+
     // GET /api/notifications
     // Returns all notifications for the logged-in user, newest first
     getNotifications: async (userId: string): Promise<Notification[]> => {
@@ -51,6 +62,18 @@ export const notificationService = {
             [id]
         );
         return (result.rowCount ?? 0) > 0;
+    },
+
+    // GET users by department (for team notifications)
+    getUsersByDepartment: async (departmentId: string): Promise<{ id: string; role: string }[]> => {
+        const result = await db.query(
+            `SELECT u.id, u.role 
+             FROM users u
+             JOIN profiles p ON p.user_id = u.id
+             WHERE p.department_id = $1`,
+            [departmentId]
+        );
+        return result.rows;
     },
 
     // GET /api/notifications/search?q=

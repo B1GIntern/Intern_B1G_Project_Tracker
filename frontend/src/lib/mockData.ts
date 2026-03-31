@@ -29,7 +29,7 @@ export interface DisplayUser {
   full_name: string;
   email: string;
   avatar_url: string | null;
-  role: 'admin' | 'manager' | 'user';
+  role: 'admin' | 'manager' | 'employee';
   department_id: string;
   department_name: string;
 }
@@ -143,7 +143,7 @@ export const getMockUsers = (): DisplayUser[] => [
     full_name: 'Regular User',
     email: 'user@b1g.com',
     avatar_url: null,
-    role: 'user',
+    role: 'employee',
     department_id: '1',
     department_name: 'Engineering'
   },
@@ -153,7 +153,7 @@ export const getMockUsers = (): DisplayUser[] => [
     full_name: 'Sarah Johnson',
     email: 'sarah@b1g.com',
     avatar_url: null,
-    role: 'user',
+    role: 'employee',
     department_id: '2',
     department_name: 'Marketing'
   },
@@ -163,7 +163,7 @@ export const getMockUsers = (): DisplayUser[] => [
     full_name: 'Mike Wilson',
     email: 'mike@b1g.com',
     avatar_url: null,
-    role: 'user',
+    role: 'employee',
     department_id: '3',
     department_name: 'Sales'
   }

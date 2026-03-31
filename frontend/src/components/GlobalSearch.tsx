@@ -1,9 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Search, ListTodo, User, Building2 } from 'lucide-react';
-
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
 interface SearchResult {
   type: 'task' | 'user' | 'department';
@@ -14,10 +12,30 @@ interface SearchResult {
 
 const GlobalSearch = () => {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const ref = useRef<HTMLDivElement>(null);
+
+  // Mock data for demonstration - replace with actual data fetching
+  const mockData = [
+    { type: 'task' as const, id: '1', label: 'Fix login bug', sublabel: 'High priority' },
+    { type: 'task' as const, id: '2', label: 'Update documentation', sublabel: 'In progress' },
+    { type: 'user' as const, id: '1', label: 'Jerimy L', sublabel: 'Employee' },
+    { type: 'user' as const, id: '2', label: 'Aeron Casin', sublabel: 'Admin' },
+    { type: 'department' as const, id: '1', label: 'IT', sublabel: 'Technology' },
+    { type: 'department' as const, id: '2', label: 'HR', sublabel: 'Human Resources' },
+  ];
+
+  // Filter results based on query
+  const results = useMemo(() => {
+    if (query.length < 2) return [];
+    
+    const queryLower = query.toLowerCase();
+    return mockData.filter(item => 
+      item.label.toLowerCase().includes(queryLower) ||
+      (item.sublabel && item.sublabel.toLowerCase().includes(queryLower))
+    ).slice(0, 8); // Limit to 8 results
+  }, [query]);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -28,23 +46,8 @@ const GlobalSearch = () => {
   }, []);
 
   useEffect(() => {
-    if (query.length < 2) { setResults([]); return; }
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`, {
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-        });
-        if (!res.ok) throw new Error('Search failed');
-        const data: SearchResult[] = await res.json();
-        setResults(data);
-        setOpen(data.length > 0);
-      } catch {
-        setResults([]);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [query]);
+    setOpen(results.length > 0 && query.length >= 2);
+  }, [results, query]);
 
   const handleSelect = (r: SearchResult) => {
     setOpen(false);

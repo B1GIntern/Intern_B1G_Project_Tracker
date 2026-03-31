@@ -71,4 +71,27 @@ export const authController = {
             }
         }
     },
+    // POST /api/auth/change-password
+    // Changes the user's password (for logged-in users)
+    changePassword: async (req: Request, res: Response): Promise<void> => {
+        try {
+            const userId = req.user!.userId;
+            const { newPassword } = req.body;
+
+            if (!newPassword || newPassword.length < 6) {
+                sendError(res, 'Password must be at least 6 characters');
+                return;
+            }
+
+            const success = await authService.changePassword(userId, newPassword);
+            if (!success) {
+                sendError(res, 'Failed to change password', 500);
+                return;
+            }
+
+            sendSuccess(res, { message: 'Password changed successfully' });
+        } catch {
+            sendError(res, 'Failed to change password', 500);
+        }
+    },
 };

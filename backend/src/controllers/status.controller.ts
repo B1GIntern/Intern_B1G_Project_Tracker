@@ -12,9 +12,9 @@ export const getBackendStatus = (req: Request, res: Response) => {
 
 export const getDatabaseStatus = async (req: Request, res: Response) => {
     try {
-        // Test database connection with a simple query
-        await db.query('SELECT 1');
-        
+        const { error } = await db.from('users').select('count').limit(1);
+        if (error) throw error;
+
         res.json({
             success: true,
             message: 'database is running with the backend and frontend',
@@ -24,13 +24,12 @@ export const getDatabaseStatus = async (req: Request, res: Response) => {
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error('Database connection test failed:', errorMessage);
-        
+
         res.status(500).json({
             success: false,
             message: 'database connection failed',
             status: 'disconnected',
             error: errorMessage,
-            suggestion: 'Please check DATABASE_URL in .env file',
             timestamp: new Date().toISOString()
         });
     }
@@ -38,11 +37,10 @@ export const getDatabaseStatus = async (req: Request, res: Response) => {
 
 export const getAllStatus = async (req: Request, res: Response) => {
     let dbStatus: string;
-    
+
     try {
-        // Test database connection
-        await db.query('SELECT 1');
-        dbStatus = 'connected';
+        const { error } = await db.from('users').select('count').limit(1);
+        dbStatus = error ? 'disconnected' : 'connected';
     } catch (error) {
         dbStatus = 'disconnected';
     }
@@ -54,7 +52,9 @@ export const getAllStatus = async (req: Request, res: Response) => {
             status: 'running'
         },
         database: {
-            message: dbStatus === 'connected' ? 'database is running with the backend and frontend' : 'database connection failed',
+            message: dbStatus === 'connected'
+                ? 'database is running with the backend and frontend'
+                : 'database connection failed',
             status: dbStatus
         },
         timestamp: new Date().toISOString()

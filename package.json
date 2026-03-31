@@ -25,8 +25,5 @@
     "typescript"
   ],
   "author": "",
-  "license": "MIT",
-  "dependencies": {
-    "@supabase/supabase-js": "^2.99.1"
-  }
+  "license": "MIT"
 }

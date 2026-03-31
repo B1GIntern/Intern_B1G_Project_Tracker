@@ -3,17 +3,17 @@
 export type TaskStatus = string;
 
 // ─── TASK ─────────────────────────────────────────────────────────────────────
-// Matches the `tasks` table
+// Matches the `tracker_tasks` table
 export interface Task {
     id: string;
     title: string;
     description: string | null;
     status: TaskStatus;
-    progress: number;
-    due_date: Date | null;
     assigned_to: string | null;
     created_by: string;
     department_id: string | null;
+    due_date: Date | null;
+    progress: number; // 0-100 percentage
     created_at: Date;
     updated_at: Date;
 }
@@ -37,10 +37,10 @@ export interface CreateTaskBody {
     title: string;
     description?: string;
     status?: TaskStatus;
-    progress?: number;
-    due_date?: string;
     assigned_to?: string;
     department_id?: string;
+    due_date?: Date | string | null;
+    progress?: number; // 0-100 percentage
 }
 
 // Shape of the request body when updating a task (all fields optional)

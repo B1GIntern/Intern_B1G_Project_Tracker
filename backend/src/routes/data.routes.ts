@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { db } from '../config/db';
+import { dashboardController } from '../controllers/dashboard.controller';
+import { requireAuth } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -129,6 +131,42 @@ router.get('/notifications', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch notifications',
+      error: error.message
+    });
+  }
+});
+
+// Dashboard routes - re-enable authentication
+router.use(requireAuth);
+
+// GET /api/data/dashboard/stats - Get dashboard statistics
+router.get('/dashboard/stats', dashboardController.getStats);
+
+// GET /api/data/dashboard/chart-data - Get dashboard chart data
+router.get('/dashboard/chart-data', dashboardController.getChartData);
+
+// GET /api/data/dashboard/user-performance - Get user performance data
+router.get('/dashboard/user-performance', dashboardController.getUserPerformance);
+
+// TEST: Check user role
+router.get('/test-user-role/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const result = await db.query(`
+      SELECT ur.role_name 
+      FROM users_role ur
+      JOIN profile p ON p.id = ur.user_id 
+      WHERE p.email = $1
+    `, [email]);
+    
+    res.json({
+      success: true,
+      email,
+      role: result.rows[0]?.role_name || 'No role found'
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
       error: error.message
     });
   }
