@@ -50,6 +50,8 @@ export const userController = {
             sendSuccess(res, user, 201);
         } catch (err: any) {
             console.error('Create user error:', err);
+            console.error('Error code:', err.code);
+            console.error('Error message:', err.message);
             
             // Handle specific Supabase errors
             if (err.code === 'email_exists' || err.message?.includes('already been registered')) {
@@ -65,13 +67,24 @@ export const userController = {
     updateUser: async (req: Request, res: Response): Promise<void> => {
         try {
             const user_id = String(req.params.user_id);
+            console.log('[UserController] Update user request:', {
+                user_id,
+                body: req.body
+            });
+            
             if (!isValidUUID(user_id)) { sendError(res, 'Invalid user ID'); return; }
             if (req.body.role && !isValidRole(req.body.role)) { sendError(res, 'Role must be admin, manager, or employee'); return; }
 
             const user = await userService.updateUser(user_id, req.body);
             if (!user) { sendError(res, 'User not found', 404); return; }
             sendSuccess(res, user);
-        } catch {
+        } catch (err: any) {
+            console.error('[UserController] Update user error:', err);
+            console.error('[UserController] Error details:', {
+                message: err.message,
+                code: err.code,
+                stack: err.stack
+            });
             sendError(res, 'Failed to update user', 500);
         }
     },

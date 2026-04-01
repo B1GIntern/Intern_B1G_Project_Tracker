@@ -347,15 +347,6 @@ const Departments = () => {
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
-                      <button
-                        onClick={() => handleDelete(dept)}
-                        className="h-8 w-8 rounded-lg flex items-center justify-center
-                                   bg-slate-100 dark:bg-white/10 hover:bg-rose-100 dark:hover:bg-rose-500/20
-                                   text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400
-                                   transition-all duration-150"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
                     </div>
                   </TableCell>
                 </TableRow>

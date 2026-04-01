@@ -1,314 +1,209 @@
-import bcrypt from 'bcryptjs';
-import { db, isSupabase } from '../config/db';
-import { v4 as uuidv4 } from 'uuid';
-import { createClient } from '@supabase/supabase-js';
-import { env } from '../config/env';
-import { DisplayUser, TeamMember, AppRole } from '../models/user.model';
-
-// Create Supabase admin client for auth operations
-const supabaseAdmin = isSupabase ? createClient(
-    env.SUPABASE_URL,
-    env.SUPABASE_SERVICE_ROLE_KEY,
-    {
-        auth: {
-            autoRefreshToken: false,
-            persistSession: false
-        }
-    }
-) : null;
+import { db } from '../config/db';
+import { supabaseAdmin } from '../config/supabase';
 
 export const userService = {
-    getAllUsers: async (): Promise<DisplayUser[]> => {
-        const result = await db.query(
-            `SELECT
-        u.id              AS user_id,
-        p.first_name || ' ' || p.last_name as full_name,
-        p.email,
-        NULL as avatar_url,
-        ur.role_name as role,
-        p.department_id,
-        d.name            AS department_name
-      FROM auth.users u
-      JOIN profile p             ON p.id = u.id
-      LEFT JOIN users_role ur           ON ur.user_id = u.id
-      LEFT JOIN departments d      ON d.id = p.department_id
-      ORDER BY p.first_name ASC`
-        );
+    getAllUsers: async (): Promise<any[]> => {
+        const result = await db.query(`
+            SELECT 
+                p.id as user_id,
+                p.first_name,
+                p.last_name,
+                CONCAT(p.first_name, ' ', p.last_name) as full_name,
+                p.email,
+                p.department_id,
+                d.name as department_name,
+                ur.role_name as role,
+                p.created_at
+            FROM profile p
+            LEFT JOIN departments d ON d.id = p.department_id
+            LEFT JOIN users_role ur ON ur.user_id = p.id
+            ORDER BY p.created_at DESC
+        `);
         return result.rows;
     },
 
-    createUser: async (data: {
-        full_name: string;
-        email: string;
-        password: string;
-        role: AppRole;
-        department_id?: string;
-    }): Promise<DisplayUser> => {
-        const client = await db.connect();
-        try {
-            await client.query('BEGIN');
-
-            console.log('Creating user with data:', data);
-            console.log('isSupabase:', isSupabase);
-            console.log('supabaseAdmin exists:', !!supabaseAdmin);
-
-            // First check if user already exists in auth.users
-            const existingAuthUser = await client.query(
-                'SELECT id, email FROM auth.users WHERE email = $1',
-                [data.email]
-            );
-
-            let userId: string;
-            if (existingAuthUser.rows.length > 0) {
-                // User exists in auth, use existing ID
-                userId = existingAuthUser.rows[0].id;
-                console.log('User already exists in auth.users with ID:', userId);
-                
-                // Check if profile already exists
-                const existingProfile = await client.query(
-                    'SELECT id FROM profile WHERE id = $1',
-                    [userId]
-                );
-                
-                if (existingProfile.rows.length > 0) {
-                    throw new Error(`User with email "${data.email}" already exists in the system`);
-                } else {
-                    // User exists in auth but no profile - create profile for existing user
-                    console.log('Creating profile for existing auth user...');
-                    
-                    const [firstName, lastName] = data.full_name.split(' ');
-                    
-                    // Create profile for existing auth user
-                    await client.query(
-                        'INSERT INTO profile (id, email, first_name, last_name, department_id) VALUES ($1, $2, $3, $4, $5)',
-                        [userId, data.email, firstName, lastName, data.department_id]
-                    );
-                    console.log('Profile created for existing user');
-                    
-                    // Assign role
-                    await client.query(
-                        'INSERT INTO users_role (user_id, role_name) VALUES ($1, $2)',
-                        [userId, data.role]
-                    );
-                    console.log('Role assigned successfully');
-                    
-                    await client.query('COMMIT');
-                    console.log('Transaction committed successfully');
-                    
-                    let department_name: string | null = null;
-                    if (data.department_id) {
-                        const deptResult = await db.query(
-                            'SELECT name FROM departments WHERE id = $1',
-                            [data.department_id]
-                        );
-                        department_name = deptResult.rows[0]?.name ?? null;
-                    }
-                    
-                    return {
-                        user_id: userId,
-                        full_name: data.full_name,
-                        email: data.email,
-                        avatar_url: null,
-                        role: data.role,
-                        department_id: data.department_id ?? null,
-                        department_name,
-                    };
-                }
-            } else {
-                // Create new user in Supabase auth
-                if (isSupabase && supabaseAdmin) {
-                    console.log('Creating user in Supabase auth...');
-                    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-                        email: data.email,
-                        password: data.password,
-                        email_confirm: true,
-                        user_metadata: {
-                            full_name: data.full_name
-                        }
-                    });
-
-                    console.log('Supabase auth response:', { authData, authError });
-
-                    if (authError || !authData.user) {
-                        console.error('Supabase auth error:', authError);
-                        throw new Error(authError?.message || 'Failed to create user in authentication system');
-                    }
-                    userId = authData.user.id;
-                    console.log('Supabase user created with ID:', userId);
-                } else {
-                    console.error('Supabase authentication not available');
-                    throw new Error('Supabase authentication not available');
-                }
-            }
-
-            // Create profile in database
-            const [firstName, lastName] = data.full_name.split(' ');
-            console.log('Creating profile with:', { userId, email: data.email, firstName, lastName, department_id: data.department_id });
-            
-            await client.query(
-                'INSERT INTO profile (id, email, first_name, last_name, department_id) VALUES ($1, $2, $3, $4, $5)',
-                [userId, data.email, firstName, lastName, data.department_id]
-            );
-            console.log('Profile created successfully');
-
-            // Assign role
-            console.log('Assigning role:', data.role, 'to user:', userId);
-            await client.query(
-                'INSERT INTO users_role (user_id, role_name) VALUES ($1, $2)',
-                [userId, data.role]
-            );
-            console.log('Role assigned successfully');
-
-            await client.query('COMMIT');
-            console.log('Transaction committed successfully');
-
-            let department_name: string | null = null;
-            if (data.department_id) {
-                const deptResult = await db.query(
-                    'SELECT name FROM departments WHERE id = $1',
-                    [data.department_id]
-                );
-                department_name = deptResult.rows[0]?.name ?? null;
-            }
-
-            return {
-                user_id: userId,
-                full_name: data.full_name,
-                email: data.email,
-                avatar_url: null,
-                role: data.role,
-                department_id: data.department_id ?? null,
-                department_name,
-            };
-        } catch (err) {
-            await client.query('ROLLBACK');
-            throw err;
-        } finally {
-            client.release();
-        }
+    getUserById: async (userId: string): Promise<any | null> => {
+        const result = await db.query(`
+            SELECT 
+                p.id as user_id,
+                p.first_name,
+                p.last_name,
+                CONCAT(p.first_name, ' ', p.last_name) as full_name,
+                p.email,
+                p.department_id,
+                d.name as department_name,
+                ur.role_name as role,
+                p.created_at
+            FROM profile p
+            LEFT JOIN departments d ON d.id = p.department_id
+            LEFT JOIN users_role ur ON ur.user_id = p.id
+            WHERE p.id = $1
+        `, [userId]);
+        return result.rows[0] || null;
     },
 
-    updateUser: async (
-        userId: string,
-        data: { full_name?: string; email?: string; role?: AppRole; department_id?: string }
-    ): Promise<DisplayUser | null> => {
-        const client = await db.connect();
+    createUser: async (data: any): Promise<any> => {
+        const { full_name, email, password, role, department_id } = data;
+
+        // Split full_name into first_name and last_name for metadata
+        const nameParts = full_name.split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        // Create auth user in Supabase with user metadata for display name
+        const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: {
+                full_name: full_name,
+                first_name: firstName,
+                last_name: lastName
+            }
+        });
+
+        if (authError) throw authError;
+
+        const userId = authUser.user.id;
+
+        // Create profile record with first_name and last_name (no role column)
+        await db.query(`
+            INSERT INTO profile (id, first_name, last_name, email, department_id)
+            VALUES ($1, $2, $3, $4, $5)
+        `, [userId, firstName, lastName, email, department_id]);
+
+        // Create user role record
+        await db.query(`
+            INSERT INTO users_role (user_id, role_name)
+            VALUES ($1, $2)
+        `, [userId, role]);
+
+        return { user_id: userId, full_name, email, role };
+    },
+
+    updateUser: async (userId: string, data: any): Promise<any | null> => {
+        const fields: string[] = [];
+        const values: any[] = [];
+        let paramIndex = 1;
+
+        if (data.full_name) {
+            // Split full_name into first_name and last_name
+            const nameParts = data.full_name.split(' ');
+            const firstName = nameParts[0] || '';
+            const lastName = nameParts.slice(1).join(' ') || '';
+            fields.push(`first_name = $${paramIndex++}`);
+            values.push(firstName);
+            fields.push(`last_name = $${paramIndex++}`);
+            values.push(lastName);
+        }
+        if (data.email) {
+            fields.push(`email = $${paramIndex++}`);
+            values.push(data.email);
+        }
+        if (data.department_id !== undefined) {
+            fields.push(`department_id = $${paramIndex++}`);
+            values.push(data.department_id);
+        }
+
+        if (fields.length === 0) return null;
+
+        values.push(userId);
+        const query = `UPDATE profile SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+        
         try {
-            await client.query('BEGIN');
-
-            if (data.full_name) {
-                const [firstName, lastName] = data.full_name.split(' ');
-                await client.query(
-                    'UPDATE profile SET first_name = $1, last_name = $2 WHERE id = $3',
-                    [firstName, lastName, userId]
-                );
-                console.log('Full name update query executed');
-            }
-
-            if (data.email) {
-                console.log('Updating email for user:', userId, 'to:', data.email);
-                await client.query(
-                    'UPDATE profile SET email = $1 WHERE id = $2',
-                    [data.email, userId]
-                );
-                console.log('Email update query executed');
-            }
-
+            const result = await db.query(query, values);
+            
+            // Update role if changed
             if (data.role) {
-                console.log('Updating role for user:', userId, 'to:', data.role);
-                await client.query(
-                    'UPDATE users_role SET role_name = $1 WHERE user_id = $2',
-                    [data.role, userId]
-                );
-                console.log('Role update query executed');
+                await db.query(`
+                    UPDATE users_role SET role_name = $1 WHERE user_id = $2
+                `, [data.role, userId]);
             }
 
-            if (data.department_id !== undefined) {
-                console.log('Updating department for user:', userId, 'to:', data.department_id);
-                await client.query(
-                    'UPDATE profile SET department_id = $1 WHERE id = $2',
-                    [data.department_id, userId]
-                );
-            }
-
-            await client.query('COMMIT');
-
-            const result = await db.query(
-                `SELECT u.id AS user_id, p.first_name || ' ' || p.last_name as full_name, p.email, NULL as avatar_url,
-                ur.role_name as role, p.department_id, d.name AS department_name
-         FROM auth.users u
-         JOIN profile p ON p.id = u.id
-         LEFT JOIN users_role ur ON ur.user_id = u.id
-         LEFT JOIN departments d ON d.id = p.department_id
-         WHERE u.id = $1`,
-                [userId]
-            );
-            console.log('User updated successfully');
-            return result.rows[0] ?? null;
-        } catch (err) {
-            await client.query('ROLLBACK');
-            throw err;
-        } finally {
-            client.release();
+            return result.rows[0] || null;
+        } catch (error: any) {
+            console.error('[UserService] Update user error:', error.message);
+            throw error;
         }
     },
 
     deleteUser: async (userId: string): Promise<boolean> => {
-        const client = await db.connect();
         try {
-            await client.query('BEGIN');
+            console.log('[UserService] Deleting user:', userId);
             
-            // Delete from profile table first (foreign key reference)
-            await client.query('DELETE FROM profile WHERE id = $1', [userId]);
+            // First, handle tasks where user is the creator
+            // Option 1: Set created_by to NULL for tasks they created
+            await db.query(`
+                UPDATE tracker_tasks 
+                SET created_by = NULL 
+                WHERE created_by = $1
+            `, [userId]);
+            console.log('[UserService] Updated tasks created by user');
             
-            // Delete from auth.users
-            const result = await client.query(
-                'DELETE FROM auth.users WHERE id = $1',
-                [userId]
-            );
+            // Handle tasks where user is assigned
+            // Option 1: Set assigned_to to NULL for tasks assigned to them
+            await db.query(`
+                UPDATE tracker_tasks 
+                SET assigned_to = NULL 
+                WHERE assigned_to = $1
+            `, [userId]);
+            console.log('[UserService] Updated tasks assigned to user');
             
-            await client.query('COMMIT');
-            return (result.rowCount ?? 0) > 0;
-        } catch (err) {
-            await client.query('ROLLBACK');
-            throw err;
-        } finally {
-            client.release();
+            // Delete user's notifications
+            await db.query('DELETE FROM notifications WHERE user_id = $1', [userId]);
+            console.log('[UserService] Deleted user notifications');
+            
+            // Delete from users_role first
+            await db.query('DELETE FROM users_role WHERE user_id = $1', [userId]);
+            console.log('[UserService] Deleted from users_role');
+            
+            // Delete from profile
+            const result = await db.query('DELETE FROM profile WHERE id = $1', [userId]);
+            console.log('[UserService] Deleted from profile, rowCount:', result.rowCount);
+            
+            // Delete auth user
+            const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+            if (error) {
+                console.error('[UserService] Error deleting auth user:', error);
+            } else {
+                console.log('[UserService] Deleted from auth.users');
+            }
+
+            return result.rowCount > 0;
+        } catch (error: any) {
+            console.error('[UserService] Delete user error:', error.message);
+            throw error;
         }
     },
 
-    getTeam: async (userId: string, role: string): Promise<TeamMember[]> => {
-        // Get the user's department first
-        const userProfile = await db.query(
-            'SELECT department_id FROM profile WHERE id = $1',
-            [userId]
-        );
-
-        if (userProfile.rows.length === 0 || !userProfile.rows[0].department_id) {
-            return []; // No department assigned
+    getTeam: async (userId: string, role: string): Promise<any[]> => {
+        if (role === 'admin') {
+            return await userService.getAllUsers();
         }
 
-        const departmentId = userProfile.rows[0].department_id;
-
-        // Get all users in the same department (excluding the current user)
-        const result = await db.query(
-            `SELECT 
-                u.id AS user_id,
-                p.first_name || ' ' || p.last_name as full_name,
+        // For managers - get users in same department
+        const result = await db.query(`
+            SELECT 
+                p.id as user_id,
+                CONCAT(p.first_name, ' ', p.last_name) as full_name,
                 p.email,
-                NULL as avatar_url,
                 ur.role_name as role,
-                p.department_id,
-                d.name AS department_name
-            FROM auth.users u
-            JOIN profile p ON p.id = u.id
-            LEFT JOIN users_role ur ON ur.user_id = u.id
+                d.name as department_name
+            FROM profile p
             LEFT JOIN departments d ON d.id = p.department_id
-            WHERE p.department_id = $1 AND u.id != $2
-            ORDER BY p.first_name ASC`,
-            [departmentId, userId]
-        );
+            LEFT JOIN users_role ur ON ur.user_id = p.id
+            WHERE p.department_id = (SELECT department_id FROM profile WHERE id = $1)
+            AND p.id != $1
+        `, [userId]);
 
         return result.rows;
     },
+
+    updateNotificationPreferences: async (userId: string, preferences: any): Promise<any | null> => {
+        // For now, just return the user without updating since column doesn't exist
+        const result = await db.query(`
+            SELECT * FROM profile WHERE id = $1
+        `, [userId]);
+        return result.rows[0] || null;
+    }
 };

@@ -88,7 +88,7 @@ router.delete('/cleanup-orphaned', async (req, res) => {
             throw new Error(authError.message);
         }
 
-        const userToDelete = authUsers.users.find(u => u.email === email);
+        const userToDelete = authUsers.users.find((u: any) => u.email === email);
         
         if (!userToDelete) {
             return res.status(404).json({

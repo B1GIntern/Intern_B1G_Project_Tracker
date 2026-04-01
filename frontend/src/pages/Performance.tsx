@@ -48,10 +48,14 @@ const Performance = () => {
         });
 
         if (response.ok) {
-          const data = await response.json();
-          setPerformanceData(data.data.users || []);
+          const result = await response.json();
+          console.log('[Performance] API response:', result);
+          // Extract users from the nested data structure
+          const users = result.data?.data?.users || result.data?.users || [];
+          console.log('[Performance] Extracted users:', users);
+          setPerformanceData(users);
         } else {
-          console.error('Failed to fetch performance data');
+          console.error('[Performance] Failed to fetch performance data:', response.status, response.statusText);
         }
       } catch (error) {
         console.error('Error fetching performance data:', error);

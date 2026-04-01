@@ -397,9 +397,9 @@ const Dashboard = () => {
             </p>
 
             {/* Mini progress bars for first 3 users */}
-            {userPerformance.users.length > 0 && (
+            {userPerformance?.users?.length > 0 && (
               <div className="mt-4 space-y-2">
-                {userPerformance.users.slice(0, 3).map((u) => (
+                {userPerformance?.users?.slice(0, 3).map((u) => (
                   <div key={u.user_id} className="flex items-center gap-2">
                     <p className="w-20 truncate text-[10px] font-semibold text-slate-500 dark:text-slate-400">
                       {u.full_name?.split(' ')[0] ?? 'User'}

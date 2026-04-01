@@ -39,6 +39,7 @@ export const dashboardController = {
 
     // GET /api/data/dashboard/user-performance
     getUserPerformance: async (req: Request, res: Response): Promise<void> => {
+        console.log('[Controller] User performance endpoint HIT');
         try {
             // Use real authenticated user data
             const userId = req.user!.userId;

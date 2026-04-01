@@ -78,6 +78,13 @@ function UserAvatar({ name, role }: { name: string; role: AppRole }) {
 /* ── Role badge ── */
 function RoleBadge({ role }: { role: AppRole }) {
   const cfg = ROLE_CONFIG[role];
+  if (!cfg) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-slate-100 text-slate-600">
+        {role || 'Unknown'}
+      </span>
+    );
+  }
   const Icon = cfg.icon;
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${cfg.classes} ${cfg.darkClasses}`}>

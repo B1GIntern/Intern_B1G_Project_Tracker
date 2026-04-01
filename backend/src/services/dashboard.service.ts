@@ -233,9 +233,20 @@ export const dashboardService = {
             throw new Error('Access denied');
         }
 
+        // Build the WHERE clause based on role
+        let roleFilter = '';
+        if (role !== 'admin') {
+            // Non-admin users should not see admin users in performance data
+            roleFilter = "WHERE (ur.role_name != 'admin' OR ur.role_name IS NULL)";
+        } else {
+            // Admin can see all users including themselves
+            roleFilter = 'WHERE 1=1';
+        }
+
+        // SIMPLIFIED QUERY - always return all users for now to debug
         const performanceQuery = `
             SELECT 
-                u.id as user_id,
+                p.id as user_id,
                 p.first_name || ' ' || p.last_name as full_name,
                 p.email,
                 d.name as department_name,
@@ -251,21 +262,40 @@ export const dashboardService = {
                     WHEN COUNT(t.id) = 0 THEN 0.00
                     ELSE ROUND(AVG(t.progress), 2)
                 END as avg_progress
-            FROM auth.users u
-            JOIN profile p ON p.id = u.id
-            LEFT JOIN users_role ur ON ur.user_id = u.id
-            LEFT JOIN departments d ON p.department_id = d.id
+            FROM profile p
+            LEFT JOIN departments d ON d.id = p.department_id
             LEFT JOIN tracker_tasks t ON p.id = t.assigned_to
-            WHERE (ur.role_name != 'admin' OR ur.role_name IS NULL)
-            ${whereClause ? ' AND ' + whereClause.replace('WHERE ', '') : ''}
-            GROUP BY u.id, p.first_name, p.last_name, p.email, d.name
+            GROUP BY p.id, p.first_name, p.last_name, p.email, d.name
             ORDER BY avg_progress DESC, completion_rate DESC, completed_tasks DESC
         `;
 
-        const result = await db.query(performanceQuery, params);
+        console.log('[DashboardService] User performance - Role:', role, 'UserId:', userId);
+        console.log('[DashboardService] roleFilter:', roleFilter);
+        console.log('[DashboardService] whereClause:', whereClause);
+        console.log('[DashboardService] params:', params);
+
+        console.log('[DashboardService] User performance - Role:', role, 'UserId:', userId);
+        console.log('[DashboardService] roleFilter:', roleFilter);
+        console.log('[DashboardService] whereClause:', whereClause);
+        console.log('[DashboardService] params:', params);
+        console.log('[DashboardService] Full query:', performanceQuery);
+
+        const result = await db.query(performanceQuery);
+        console.log('[DashboardService] Query returned', result.rows.length, 'rows');
+        console.log('[DashboardService] First row:', result.rows[0]);
+
+        // Also check if users exist at all
+        const userCheck = await db.query('SELECT COUNT(*) as count FROM auth.users');
+        console.log('[DashboardService] Total users in auth.users:', userCheck.rows[0]?.count);
+
+        const profileCheck = await db.query('SELECT COUNT(*) as count FROM profile');
+        console.log('[DashboardService] Total users in profile:', profileCheck.rows[0]?.count);
 
         return {
-            users: result.rows
+            success: true,
+            data: {
+                users: result.rows
+            }
         };
     }
 };

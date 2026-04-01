@@ -91,11 +91,44 @@ export const taskService = {
     },
 
     // GET /api/tasks
-    // Returns all tasks ordered by newest first
-    getAllTasks: async (): Promise<Task[]> => {
-        const result = await db.query(
-            'SELECT * FROM tracker_tasks ORDER BY created_at DESC'
-        );
+    // Returns tasks based on role:
+    //   admin   → ALL tasks
+    //   manager → tasks in their department only
+    //   employee → tasks assigned to them only
+    getAllTasks: async (userId: string, role: string): Promise<Task[]> => {
+        let result;
+        
+        if (role === 'admin') {
+            result = await db.query(
+                'SELECT * FROM tracker_tasks ORDER BY created_at DESC'
+            );
+        } else if (role === 'manager') {
+            // Get manager's department
+            const deptResult = await db.query(
+                'SELECT department_id FROM profile WHERE id = $1 LIMIT 1',
+                [userId]
+            );
+            const managerDeptId = deptResult.rows[0]?.department_id;
+            
+            if (!managerDeptId) {
+                return [];
+            }
+            
+            // Get tasks where assigned_to is in the same department
+            result = await db.query(`
+                SELECT t.* FROM tracker_tasks t
+                JOIN profile p ON p.id = t.assigned_to
+                WHERE p.department_id = $1
+                ORDER BY t.created_at DESC
+            `, [managerDeptId]);
+        } else {
+            // Employee - only their assigned tasks
+            result = await db.query(
+                'SELECT * FROM tracker_tasks WHERE assigned_to = $1 ORDER BY created_at DESC',
+                [userId]
+            );
+        }
+        
         return result.rows;
     },
 
