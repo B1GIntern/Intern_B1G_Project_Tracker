@@ -4,7 +4,7 @@ import { taskService } from '../services/task.service';
 
 import { sendSuccess, sendError } from '../utils/response';
 
-import { getMissingField, isValidUUID, isValidProgress } from '../utils/validators';
+import { getMissingField, isValidUUID } from '../utils/validators';
 
 import { db } from '../config/db';
 
@@ -46,75 +46,9 @@ async function createDoneNotifications(task: any, userId: string) {
 
 
 
-        // Get the mover's department for filtering
+        // 1. Notify the assignee (if different from the mover)
 
-        const moverResult = await db.query(
-
-            `SELECT department_id FROM profile WHERE id = $1`,
-
-            [userId]
-
-        );
-
-        const moverDeptId = moverResult.rows[0]?.department_id;
-
-        console.log('Mover Dept ID:', moverDeptId);
-
-
-
-        if (!moverDeptId) {
-
-            console.log('ERROR: User has no department, skipping notifications');
-
-            return;
-
-        }
-
-
-
-        // Get Manager(s) and Admin(s) in the same department
-
-        const query = `SELECT DISTINCT p.id as user_id, p.first_name, p.last_name 
-
-             FROM profile p 
-
-             JOIN users_role ur ON ur.user_id = p.id 
-
-             WHERE LOWER(ur.role_name) IN ('manager', 'admin') 
-
-               AND p.department_id = $1`;
-
-        console.log('Executing query:', query, 'with dept:', moverDeptId);
-
-        
-
-        const adminManagerResult = await db.query(query, [moverDeptId]);
-
-        console.log('Query result count:', adminManagerResult.rows.length);
-
-        console.log('Query result rows:', adminManagerResult.rows);
-
-
-
-        const notificationTitle = `${assigneeName} is Done with the Task`;
-
-        const notificationMessage = `Task "${task.title}" has been completed by ${assigneeName}`;
-
-
-
-        for (const adminManager of adminManagerResult.rows) {
-
-            // Skip creating notification for the user who performed the action
-
-            if (adminManager.user_id === userId) {
-
-                console.log('Skipping notification for self:', adminManager.user_id);
-
-                continue;
-
-            }
-
-            console.log('Creating notification for:', adminManager.user_id);
+        if (task.assigned_to && task.assigned_to !== userId) {
 
             await db.query(
 
@@ -124,13 +58,13 @@ async function createDoneNotifications(task: any, userId: string) {
 
                 [
 
-                    adminManager.user_id,
+                    task.assigned_to,
 
-                    notificationTitle,
+                    `Task Completed`,
 
-                    notificationMessage,
+                    `Your task "${task.title}" has been marked as completed`,
 
-                    'task_assigned',
+                    'task_completed',
 
                     task.id
 
@@ -138,11 +72,73 @@ async function createDoneNotifications(task: any, userId: string) {
 
             );
 
+            console.log('Created notification for assignee:', task.assigned_to);
+
         }
 
 
 
-        console.log(`=== SUCCESS: Created ${adminManagerResult.rows.length} notifications ===`);
+        // 2. Notify Admin(s) in the same department as the ASSIGNEE (not the mover)
+        console.log('DEBUG: task.assigned_to =', task.assigned_to);
+        console.log('DEBUG: userId (mover) =', userId);
+        
+        const assigneeDeptResult = await db.query(
+            `SELECT department_id FROM profile WHERE id = $1`,
+            [task.assigned_to || userId]
+        );
+        
+        console.log('DEBUG: assigneeDeptResult.rows =', assigneeDeptResult.rows);
+        
+        const assigneeDeptId = assigneeDeptResult.rows[0]?.department_id;
+        console.log('Assignee Dept ID:', assigneeDeptId);
+
+        if (assigneeDeptId) {
+            // Get only Admins in the same department as the assignee
+            const adminResult = await db.query(
+                `SELECT DISTINCT p.id as user_id, p.first_name, p.last_name 
+                 FROM profile p 
+                 JOIN users_role ur ON ur.user_id = p.id 
+                 WHERE LOWER(ur.role_name) = 'admin' 
+                   AND p.department_id = $1`,
+                [assigneeDeptId]
+            );
+            
+            console.log('DEBUG: Admin query result rows:', adminResult.rows);
+            console.log('Admins found:', adminResult.rows.length);
+
+            const notificationTitle = `${assigneeName} completed a task`;
+            const notificationMessage = `Task "${task.title}" has been marked as completed by ${assigneeName}`;
+
+            for (const admin of adminResult.rows) {
+                console.log('DEBUG: Processing admin:', admin.user_id, admin.first_name, admin.last_name);
+                
+                // Skip if admin is the one who moved the task
+                if (admin.user_id === userId) {
+                    console.log('Skipping notification for self (admin):', admin.user_id);
+                    continue;
+                }
+
+                await db.query(
+                    `INSERT INTO notifications (user_id, title, message, type, task_id)
+                     VALUES ($1, $2, $3, $4, $5)
+                     ON CONFLICT (user_id, task_id, type) DO NOTHING`,
+                    [
+                        admin.user_id,
+                        notificationTitle,
+                        notificationMessage,
+                        'task_completed',
+                        task.id
+                    ]
+                );
+                console.log('Created notification for admin:', admin.user_id);
+            }
+        } else {
+            console.log('DEBUG: No assigneeDeptId found, skipping admin notifications');
+        }
+
+
+
+        console.log('=== SUCCESS: Created notifications for assignee and admins ===');
 
     } catch (err) {
 
@@ -155,143 +151,87 @@ async function createDoneNotifications(task: any, userId: string) {
 
 
 async function createUnderReviewNotifications(task: any, userId: string) {
-
     try {
-
         console.log('=== createUnderReviewNotifications START ===');
-
         console.log('Task:', task.title, 'Assigned to:', task.assigned_to);
-
-
+        console.log('Mover userId:', userId);
 
         // Get the ASSIGNED user's name (not the mover)
-
         let assigneeName = 'Someone';
-
         if (task.assigned_to) {
-
             const assigneeResult = await db.query(
-
                 `SELECT first_name || ' ' || last_name as full_name FROM profile WHERE id = $1`,
-
                 [task.assigned_to]
-
             );
-
             if (assigneeResult.rows[0]?.full_name) {
-
                 assigneeName = assigneeResult.rows[0].full_name;
-
             }
-
         }
-
         console.log('Assignee name:', assigneeName);
 
-
-
         // Get the mover's department for filtering
-
         const moverResult = await db.query(
-
             `SELECT department_id FROM profile WHERE id = $1`,
-
             [userId]
-
         );
-
         const moverDeptId = moverResult.rows[0]?.department_id;
-
         console.log('Mover Dept ID:', moverDeptId);
 
-
-
         if (!moverDeptId) {
-
             console.log('User has no department, skipping notifications');
-
             return;
-
         }
-
-
 
         // Get Manager(s) and Admin(s) in the same department
-
         const adminManagerResult = await db.query(
-
-            `SELECT DISTINCT p.id as user_id 
-
+            `SELECT DISTINCT p.id as user_id, p.first_name, p.last_name 
              FROM profile p 
-
              JOIN users_role ur ON ur.user_id = p.id 
-
              WHERE LOWER(ur.role_name) IN ('manager', 'admin') 
-
                AND p.department_id = $1`,
-
             [moverDeptId]
-
         );
+        
+        console.log('DEBUG: Admin/Manager query result:', adminManagerResult.rows);
+        console.log('Found', adminManagerResult.rows.length, 'managers/admins in dept');
 
-
-
-        const notificationTitle = `${assigneeName}'s task is Under Review`;
-
+        const notificationTitle = `${assigneeName} task in Under Review`;
         const notificationMessage = `Task "${task.title}" has been moved to Under Review`;
 
-
-
         // Create notification only for Manager(s) and Admin(s) in the same department
-
         for (const adminManager of adminManagerResult.rows) {
-
+            console.log('DEBUG: Processing admin/manager:', adminManager.user_id, adminManager.first_name, adminManager.last_name);
+            
             // Skip creating notification for the user who performed the action
-
             if (adminManager.user_id === userId) {
-
                 console.log('Skipping notification for self:', adminManager.user_id);
-
                 continue;
-
             }
 
-            await db.query(
-
-                `INSERT INTO notifications (user_id, title, message, type, task_id)
-
-                 VALUES ($1, $2, $3, $4, $5)`,
-
-                [
-
-                    adminManager.user_id,
-
-                    notificationTitle,
-
-                    notificationMessage,
-
-                    'task_assigned',
-
-                    task.id
-
-                ]
-
-            );
-
+            try {
+                await db.query(
+                    `INSERT INTO notifications (user_id, title, message, type, task_id)
+                     VALUES ($1, $2, $3, $4, $5)
+                     ON CONFLICT (user_id, task_id, type) DO NOTHING`,
+                    [
+                        adminManager.user_id,
+                        notificationTitle,
+                        notificationMessage,
+                        'task_completed',
+                        task.id
+                    ]
+                );
+                console.log('SUCCESS: Created notification for:', adminManager.user_id);
+            } catch (insertErr) {
+                console.error('ERROR inserting notification for', adminManager.user_id, ':', insertErr);
+            }
         }
 
-
-
-        console.log(`Created ${adminManagerResult.rows.length} notifications for Manager(s)/Admin(s) in department ${moverDeptId}`);
+        console.log(`Finished creating notifications for ${adminManagerResult.rows.length} Manager(s)/Admin(s)`);
 
     } catch (err) {
-
         console.error('Error creating under review notifications:', err);
-
-        // Don't throw - we don't want to fail the task update if notifications fail
-
     }
-
 }
 
 

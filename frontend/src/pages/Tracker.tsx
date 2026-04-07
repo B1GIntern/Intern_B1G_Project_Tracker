@@ -216,7 +216,7 @@ const Tracker = () => {
       setProfiles(data.data.profiles);
       setDepartments(data.data.departments);
       const mdi = data.data.departments.filter((d: any) => data.data.profiles.some((p: any) => p.user_id === profile?.id && p.department_id === d.id)).map((d: any) => d.id);
-      const tui = role === 'manager' ? data.data.profiles.filter((p: any) => mdi.includes(p.department_id)).map((p: any) => p.user_id) : data.data.profiles.map((p: any) => p.user_id);
+      const tui = data.data.profiles.filter((p: any) => mdi.includes(p.department_id)).map((p: any) => p.user_id);
       setMyDeptIds(mdi);
       setTeamUserIds(tui);
     } catch {
@@ -238,6 +238,12 @@ const Tracker = () => {
 
   /* ── filtering ── */
   const filtered = tasks.filter(t => {
+    // Filter tasks to only show those from the user's department
+    // Check if task's assigned user is in the same department
+    const isInMyDepartment = t.assigned_to && teamUserIds.includes(t.assigned_to);
+    const isInMyDeptByTaskDept = t.department_id && myDeptIds.includes(t.department_id);
+    if (!isInMyDepartment && !isInMyDeptByTaskDept) return false;
+
     if (debouncedSearch) {
       const sl = debouncedSearch.toLowerCase();
       const matchesTitle = t.title.toLowerCase().includes(sl);
@@ -291,8 +297,8 @@ const Tracker = () => {
   const openTask = (task: Task) => { setSelectedTask(task); setIsNew(false); setDetailOpen(true); };
 
   const teamProfiles = profiles.filter(p => teamUserIds.includes(p.user_id));
-  const employeeProfiles = role === 'manager' ? teamProfiles.filter(p => p.role === 'employee') : profiles;
-  const visibleDepts = role === 'admin' ? departments : departments.filter(d => myDeptIds.includes(d.id));
+  const employeeProfiles = teamProfiles.filter(p => p.role === 'employee');
+  const visibleDepts = departments.filter(d => myDeptIds.includes(d.id));
 
   const totalFiltered = filtered.length;
   const overdueCount = tasks.filter(t => t.due_date && new Date(t.due_date) < new Date() && t.status !== 'completed').length;
@@ -322,11 +328,7 @@ const Tracker = () => {
             <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
               {filterStatus === 'overdue'
                 ? 'Showing overdue tasks only'
-                : role === 'admin'
-                  ? 'View and manage all tasks across all departments'
-                  : role === 'manager'
-                    ? 'Manage your department tasks and team workload'
-                    : 'View and manage your assigned tasks'}
+                : 'View and manage tasks in your department'}
             </p>
           </div>
 
@@ -415,24 +417,26 @@ const Tracker = () => {
             <div className="flex items-center gap-1.5 rounded-lg bg-rose-50 dark:bg-rose-900/20
                             border border-rose-200 dark:border-rose-800/50 px-2.5 py-1 text-xs font-semibold text-rose-600 dark:text-rose-400">
               <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-              Overdue filter active
+              <span>Overdue only</span>
             </div>
           )}
 
           <div className="flex flex-wrap gap-2 ml-auto">
-            {role === 'admin' && (
+            {/* Department filter - show for all roles, filtered to their departments */}
+            {visibleDepts.length > 0 && (
               <Select value={filterDept} onValueChange={setFilterDept}>
                 <SelectTrigger className="h-8 w-40 text-xs rounded-lg border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5">
                   <SelectValue placeholder="All Departments" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl">
                   <SelectItem value="all">All Departments</SelectItem>
-                  {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                  {visibleDepts.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             )}
 
-            {role === 'manager' && teamProfiles.length > 0 && (
+            {/* User filter - show for all roles */}
+            {teamProfiles.length > 0 && (
               <Select value={filterUser} onValueChange={setFilterUser}>
                 <SelectTrigger className="h-8 w-36 text-xs rounded-lg border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5">
                   <SelectValue placeholder="All Users" />
@@ -491,25 +495,31 @@ const Tracker = () => {
                           ${isLockedForEmployee ? 'opacity-40 cursor-not-allowed' : ''}
                         `}
                       >
-                        {colTasks.map((task, index) => (
-                          <Draggable
-                            key={task.id}
-                            draggableId={task.id}
-                            index={index}
-                            isDragDisabled={false}
-                          >
-                            {(provided, snapshot) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className={`transition-transform duration-150 ${snapshot.isDragging ? 'scale-[1.02] rotate-[0.5deg] shadow-2xl' : ''}`}
-                              >
-                                <TaskCard task={task} onClick={() => openTask(task)} />
-                              </div>
-                            )}
-                          </Draggable>
-                        ))}
+                        {colTasks.map((task, index) => {
+                          // Disable drag for tasks in Done column for Employee users
+                          const isTaskInDone = task.status === 'completed' || ['completed', 'approved', 'declined'].includes(task.status);
+                          const isDragDisabled = role === 'employee' && isTaskInDone;
+                          
+                          return (
+                            <Draggable
+                              key={task.id}
+                              draggableId={task.id}
+                              index={index}
+                              isDragDisabled={isDragDisabled}
+                            >
+                              {(provided, snapshot) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  {...provided.dragHandleProps}
+                                  className={`transition-transform duration-150 ${snapshot.isDragging ? 'scale-[1.02] rotate-[0.5deg] shadow-2xl' : ''} ${isDragDisabled ? 'cursor-not-allowed opacity-70' : ''}`}
+                                >
+                                  <TaskCard task={task} onClick={() => openTask(task)} />
+                                </div>
+                              )}
+                            </Draggable>
+                          );
+                        })}
                         {provided.placeholder}
                         {colTasks.length === 0 && (
                           <EmptyColumn isLocked={isLockedForEmployee} />
@@ -523,15 +533,31 @@ const Tracker = () => {
           </div>
         </DragDropContext>
 
-        <TaskDetailPanel
-          task={selectedTask}
-          open={detailOpen}
-          onClose={() => setDetailOpen(false)}
-          onSaved={() => { fetchData(); setDetailOpen(false); }}
-          profiles={role === 'manager' ? employeeProfiles : profiles}
-          departments={visibleDepts}
-          isNew={isNew}
-        />
+        {/* Task Detail Panel */}
+        {(() => {
+          // All roles see only users from their department
+          const baseProfiles = teamProfiles;
+          const assignedUserId = selectedTask?.assigned_to;
+          const assignedUser = assignedUserId ? profiles.find(p => p.user_id === assignedUserId) : null;
+          
+          // If assigned user is not in the base profiles, add them
+          let taskProfiles = baseProfiles;
+          if (assignedUser && !baseProfiles.some(p => p.user_id === assignedUserId)) {
+            taskProfiles = [...baseProfiles, assignedUser];
+          }
+          
+          return (
+            <TaskDetailPanel
+              task={selectedTask}
+              open={detailOpen}
+              onClose={() => setDetailOpen(false)}
+              onSaved={() => { fetchData(); setDetailOpen(false); }}
+              profiles={taskProfiles}
+              departments={visibleDepts}
+              isNew={isNew}
+            />
+          );
+        })()}
       </div>
     </AppLayout>
   );

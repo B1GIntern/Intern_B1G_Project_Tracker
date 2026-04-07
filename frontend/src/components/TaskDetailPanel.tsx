@@ -51,9 +51,7 @@ const STATUS_OPTIONS = [
   { value: 'todo', label: 'To Do' },
   { value: 'in_progress', label: 'In Progress' },
   { value: 'underreview', label: 'Under Review' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'declined', label: 'Declined' },
-  { value: 'completed', label: 'Completed' },
+  { value: 'completed', label: 'Done' },
 ];
 
 interface TaskDetailPanelProps {
@@ -338,7 +336,7 @@ const TaskDetailPanel = ({ task, open, onClose, onSaved, profiles, departments, 
                 value={dueDateTime} 
                 onChange={e => setDueDateTime(e.target.value)} 
                 disabled={isEmployee}
-                className={isEmployee ? 'bg-muted/50' : ''}
+                className={isEmployee ? 'bg-muted/50' : 'dark:[color-scheme:dark]'}
               />
               {!isNew && task?.due_date && (
                 <div className={`text-sm font-medium ${getDueDateColor()}`}>

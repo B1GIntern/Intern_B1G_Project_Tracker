@@ -13,7 +13,6 @@ export interface Task {
     created_by: string;
     department_id: string | null;
     due_date: Date | null;
-    progress: number; // 0-100 percentage
     created_at: Date;
     updated_at: Date;
 }
@@ -40,7 +39,6 @@ export interface CreateTaskBody {
     assigned_to?: string;
     department_id?: string;
     due_date?: Date | string | null;
-    progress?: number; // 0-100 percentage
 }
 
 // Shape of the request body when updating a task (all fields optional)

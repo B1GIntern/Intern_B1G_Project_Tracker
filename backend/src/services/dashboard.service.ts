@@ -215,15 +215,16 @@ export const dashboardService = {
 
         if (queryUserId) {
             // Employee requesting their own performance via query parameter
-            whereClause = 'WHERE u.id = $1';
+            whereClause = 'WHERE p.id = $1';
             params = [queryUserId];
         } else if (role === 'employee') {
-            // Employee accessing their own performance directly
-            whereClause = 'WHERE u.id = $1';
+            // Employee sees users in their department (same as Manager/Admin)
+            whereClause = 'WHERE p.department_id = (SELECT department_id FROM profile WHERE id = $1)';
             params = [userId];
         } else if (role === 'admin') {
-            // Admin sees all users
-            whereClause = '';
+            // Admin sees users in their own department only
+            whereClause = 'WHERE p.department_id = (SELECT department_id FROM profile WHERE id = $1)';
+            params = [userId];
         } else if (role === 'manager') {
             // Manager sees users in their department
             whereClause = 'WHERE p.department_id = (SELECT department_id FROM profile WHERE id = $1)';
@@ -243,7 +244,7 @@ export const dashboardService = {
             roleFilter = 'WHERE 1=1';
         }
 
-        // SIMPLIFIED QUERY - always return all users for now to debug
+        // Query to get user performance filtered by department
         const performanceQuery = `
             SELECT 
                 p.id as user_id,
@@ -253,6 +254,7 @@ export const dashboardService = {
                 COUNT(t.id)::integer as total_tasks,
                 COUNT(CASE WHEN t.status = 'completed' THEN 1 END)::integer as completed_tasks,
                 COUNT(CASE WHEN t.status = 'in_progress' THEN 1 END)::integer as in_progress_tasks,
+                COUNT(CASE WHEN t.status = 'underreview' THEN 1 END)::integer as under_review_tasks,
                 COUNT(CASE WHEN t.due_date < CURRENT_DATE AND t.status != 'completed' THEN 1 END)::integer as overdue_tasks,
                 CASE 
                     WHEN COUNT(t.id) = 0 THEN 0.00
@@ -260,11 +262,18 @@ export const dashboardService = {
                 END::numeric as completion_rate,
                 CASE 
                     WHEN COUNT(t.id) = 0 THEN 0.00
-                    ELSE ROUND(AVG(t.progress), 2)
+                    ELSE ROUND(AVG(CASE 
+                        WHEN t.status = 'completed' THEN 100 
+                        WHEN t.status = 'underreview' THEN 75
+                        WHEN t.status = 'in_progress' THEN 50
+                        WHEN t.status = 'todo' THEN 0
+                        ELSE 0 
+                    END), 2)
                 END as avg_progress
             FROM profile p
             LEFT JOIN departments d ON d.id = p.department_id
             LEFT JOIN tracker_tasks t ON p.id = t.assigned_to
+            ${whereClause}
             GROUP BY p.id, p.first_name, p.last_name, p.email, d.name
             ORDER BY avg_progress DESC, completion_rate DESC, completed_tasks DESC
         `;
@@ -280,9 +289,61 @@ export const dashboardService = {
         console.log('[DashboardService] params:', params);
         console.log('[DashboardService] Full query:', performanceQuery);
 
-        const result = await db.query(performanceQuery);
+        const result = await db.query(performanceQuery, params);
         console.log('[DashboardService] Query returned', result.rows.length, 'rows');
         console.log('[DashboardService] First row:', result.rows[0]);
+        
+        // Debug: Check all tasks to see what assigned_to values exist
+        const allTasks = await db.query(`
+            SELECT id, title, status, assigned_to 
+            FROM tracker_tasks 
+            LIMIT 10
+        `);
+        console.log('[DashboardService] All tasks sample:', allTasks.rows);
+        
+        // Debug: Check Andrei D's profile ID vs auth ID
+        const andreiProfile = await db.query(`
+            SELECT id, first_name, last_name, email FROM profile WHERE email = 'dre@gmail.com'
+        `);
+        console.log('[DashboardService] Andrei D profile:', andreiProfile.rows);
+        
+        // Debug: Check raw progress calculation for Andrei D
+        const andreiCalc = await db.query(`
+            SELECT 
+                t.status,
+                CASE 
+                    WHEN t.status = 'completed' THEN 100 
+                    WHEN t.status = 'underreview' THEN 75
+                    WHEN t.status = 'in_progress' THEN 50
+                    WHEN t.status = 'todo' THEN 0
+                    ELSE 0 
+                END as calculated_progress
+            FROM tracker_tasks t
+            WHERE t.assigned_to = '618fa071-5e77-4cfd-a615-039caabb4d83'
+        `);
+        console.log('[DashboardService] Andrei D progress calculation:', andreiCalc.rows);
+        
+        // Debug: Check AVG calculation specifically
+        const andreiAvg = await db.query(`
+            SELECT 
+                AVG(CASE 
+                    WHEN t.status = 'completed' THEN 100 
+                    WHEN t.status = 'underreview' THEN 75
+                    WHEN t.status = 'in_progress' THEN 50
+                    WHEN t.status = 'todo' THEN 0
+                    ELSE 0 
+                END) as raw_avg,
+                ROUND(AVG(CASE 
+                    WHEN t.status = 'completed' THEN 100 
+                    WHEN t.status = 'underreview' THEN 75
+                    WHEN t.status = 'in_progress' THEN 50
+                    WHEN t.status = 'todo' THEN 0
+                    ELSE 0 
+                END), 2) as rounded_avg
+            FROM tracker_tasks t
+            WHERE t.assigned_to = '618fa071-5e77-4cfd-a615-039caabb4d83'
+        `);
+        console.log('[DashboardService] Andrei D AVG calculation:', andreiAvg.rows);
 
         // Also check if users exist at all
         const userCheck = await db.query('SELECT COUNT(*) as count FROM auth.users');

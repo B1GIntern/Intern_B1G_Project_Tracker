@@ -36,7 +36,7 @@ export const overdueTaskService = {
                 FROM tracker_tasks t
                 JOIN profile p ON p.id = t.assigned_to
                 WHERE t.due_date < NOW()
-                  AND t.status != 'Done'
+                  AND t.status != 'completed'
                   AND (t.overdue_notification_sent = false OR t.overdue_notification_sent IS NULL)
             `);
 
@@ -56,19 +56,37 @@ export const overdueTaskService = {
                 try {
                     console.log(`[OverdueTaskService] Processing task: ${task.title} (ID: ${task.task_id})`);
                     
+                    // Track users we've already notified for this task to prevent duplicates
+                    const notifiedUsers = new Set<string>();
+                    
                     // 1. Create notification for the task assignee
-                    console.log(`[OverdueTaskService] Creating notification for assignee: ${task.assigned_to}`);
-                    await client.query(`
-                        INSERT INTO notifications (user_id, title, message, type, task_id, read, created_at)
-                        VALUES ($1, $2, $3, $4, $5, false, NOW())
-                    `, [
-                        task.assigned_to,
-                        'Overdue Task',
-                        `Your task "${task.title}" is now overdue`,
-                        'overdue_task',
-                        task.task_id
-                    ]);
-                    console.log(`[OverdueTaskService] Notification created for assignee`);
+                    if (!notifiedUsers.has(task.assigned_to)) {
+                        // Check if notification already exists for this user/task
+                        const existingNotification = await client.query(`
+                            SELECT id FROM notifications 
+                            WHERE user_id = $1 AND task_id = $2 AND type = 'overdue_task'
+                            LIMIT 1
+                        `, [task.assigned_to, task.task_id]);
+                        
+                        if (existingNotification.rows.length === 0) {
+                            console.log(`[OverdueTaskService] Creating notification for assignee: ${task.assigned_to}`);
+                            await client.query(`
+                                INSERT INTO notifications (user_id, title, message, type, task_id, read, created_at)
+                                VALUES ($1, $2, $3, $4, $5, false, NOW())
+                                ON CONFLICT (user_id, task_id, type) DO NOTHING
+                            `, [
+                                task.assigned_to,
+                                'Overdue Task',
+                                `Your task "${task.title}" is now overdue`,
+                                'overdue_task',
+                                task.task_id
+                            ]);
+                            console.log(`[OverdueTaskService] Notification created for assignee`);
+                        } else {
+                            console.log(`[OverdueTaskService] Notification already exists for assignee: ${task.assigned_to}`);
+                        }
+                        notifiedUsers.add(task.assigned_to);
+                    }
 
                     // 2. Get Manager(s) in the same department
                     const deptId = task.department_id || task.user_department_id;
@@ -86,17 +104,35 @@ export const overdueTaskService = {
                     console.log(`[OverdueTaskService] Found ${managersResult.rows.length} managers`);
 
                     for (const manager of managersResult.rows) {
-                        console.log(`[OverdueTaskService] Creating notification for manager: ${manager.user_id}`);
-                        await client.query(`
-                            INSERT INTO notifications (user_id, title, message, type, task_id, read, created_at)
-                            VALUES ($1, $2, $3, $4, $5, false, NOW())
-                        `, [
-                            manager.user_id,
-                            'Overdue Task',
-                            `The task of ${task.assignee_name} "${task.title}" is now overdue`,
-                            'overdue_task',
-                            task.task_id
-                        ]);
+                        if (notifiedUsers.has(manager.user_id)) {
+                            console.log(`[OverdueTaskService] Skipping already notified manager: ${manager.user_id}`);
+                            continue;
+                        }
+                        
+                        // Check if notification already exists
+                        const existingNotification = await client.query(`
+                            SELECT id FROM notifications 
+                            WHERE user_id = $1 AND task_id = $2 AND type = 'overdue_task'
+                            LIMIT 1
+                        `, [manager.user_id, task.task_id]);
+                        
+                        if (existingNotification.rows.length === 0) {
+                            console.log(`[OverdueTaskService] Creating notification for manager: ${manager.user_id}`);
+                            await client.query(`
+                                INSERT INTO notifications (user_id, title, message, type, task_id, read, created_at)
+                                VALUES ($1, $2, $3, $4, $5, false, NOW())
+                                ON CONFLICT (user_id, task_id, type) DO NOTHING
+                            `, [
+                                manager.user_id,
+                                'Overdue Task',
+                                `The task of ${task.assignee_name} "${task.title}" is now overdue`,
+                                'overdue_task',
+                                task.task_id
+                            ]);
+                        } else {
+                            console.log(`[OverdueTaskService] Notification already exists for manager: ${manager.user_id}`);
+                        }
+                        notifiedUsers.add(manager.user_id);
                     }
 
                     // 3. Get Admin(s)
@@ -112,17 +148,35 @@ export const overdueTaskService = {
                     console.log(`[OverdueTaskService] Found ${adminsResult.rows.length} admins`);
 
                     for (const admin of adminsResult.rows) {
-                        console.log(`[OverdueTaskService] Creating notification for admin: ${admin.user_id}`);
-                        await client.query(`
-                            INSERT INTO notifications (user_id, title, message, type, task_id, read, created_at)
-                            VALUES ($1, $2, $3, $4, $5, false, NOW())
-                        `, [
-                            admin.user_id,
-                            'Overdue Task',
-                            `The task of ${task.assignee_name} "${task.title}" is now overdue`,
-                            'overdue_task',
-                            task.task_id
-                        ]);
+                        if (notifiedUsers.has(admin.user_id)) {
+                            console.log(`[OverdueTaskService] Skipping already notified admin: ${admin.user_id}`);
+                            continue;
+                        }
+                        
+                        // Check if notification already exists
+                        const existingNotification = await client.query(`
+                            SELECT id FROM notifications 
+                            WHERE user_id = $1 AND task_id = $2 AND type = 'overdue_task'
+                            LIMIT 1
+                        `, [admin.user_id, task.task_id]);
+                        
+                        if (existingNotification.rows.length === 0) {
+                            console.log(`[OverdueTaskService] Creating notification for admin: ${admin.user_id}`);
+                            await client.query(`
+                                INSERT INTO notifications (user_id, title, message, type, task_id, read, created_at)
+                                VALUES ($1, $2, $3, $4, $5, false, NOW())
+                                ON CONFLICT (user_id, task_id, type) DO NOTHING
+                            `, [
+                                admin.user_id,
+                                'Overdue Task',
+                                `The task of ${task.assignee_name} "${task.title}" is now overdue`,
+                                'overdue_task',
+                                task.task_id
+                            ]);
+                        } else {
+                            console.log(`[OverdueTaskService] Notification already exists for admin: ${admin.user_id}`);
+                        }
+                        notifiedUsers.add(admin.user_id);
                     }
 
                     // Mark task as notified

@@ -179,7 +179,7 @@ app.listen(env.PORT, () => {
 
     console.log('📡 API available at http://localhost:' + env.PORT + '/api');
 
-    // Start overdue task checker - runs every 5 minutes
+    // Start overdue task checker - runs every 1 minute for timely notifications
     setInterval(async () => {
         try {
             console.log('[Scheduled] Checking for overdue tasks...');
@@ -187,7 +187,7 @@ app.listen(env.PORT, () => {
         } catch (error) {
             console.error('[Scheduled] Error checking overdue tasks:', error);
         }
-    }, 5 * 60 * 1000); // 5 minutes
+    }, 60 * 1000); // 1 minute
 
     // Run immediately on startup
     overdueTaskService.checkAndNotifyOverdueTasks().catch(err => {

@@ -75,15 +75,3 @@ export const isValidUUID = (id: string): boolean => {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 };
-
-
-
-// ─── PROGRESS ─────────────────────────────────────────────────────────────────
-
-// Task progress must be between 0 and 100
-
-export const isValidProgress = (progress: number): boolean => {
-
-    return progress >= 0 && progress <= 100;
-
-};

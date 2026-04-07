@@ -1,15 +1,9 @@
 import { Router } from 'express';
-
 import { taskController } from '../controllers/task.controller';
-
 import { requireAuth } from '../middleware/auth.middleware';
-
 import { uploadAttachment } from '../middleware/upload.middleware';
 
-
-
 const router = Router();
-
 
 
 // All task routes require a valid JWT
@@ -57,7 +51,5 @@ router.get('/:id/attachments', taskController.getAttachments);
 router.post('/:id/attachments', uploadAttachment.single('file'), taskController.addAttachment);
 
 router.delete('/:id/attachments/:attId', taskController.deleteAttachment);
-
-
 
 export default router;
