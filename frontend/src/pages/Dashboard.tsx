@@ -1,286 +1,428 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { useNavigate } from 'react-router-dom';
 import AppLayout from '@/components/AppLayout';
 import StatsCard from '@/components/StatsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ListTodo, Clock, CheckCircle2, Building2, AlertTriangle, Eye } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  ListTodo, Clock, CheckCircle2, Building2,
+  AlertTriangle, Eye, ExternalLink, Users,
+  TrendingUp, Activity, Zap, ArrowUpRight,
+} from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  LineChart, Line, CartesianGrid,
+  LineChart, Line, CartesianGrid, Area, AreaChart,
 } from 'recharts';
 
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
+
+interface DashboardStats {
+  total: number;
+  inProgress: number;
+  completed: number;
+  departments: number;
+  overdue: number;
+  underReview: number;
+}
+
+/* ─── Animated counter ─── */
+function useCountUp(target: number, duration = 900) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (target === 0) { setValue(0); return; }
+    let start: number | null = null;
+    const step = (ts: number) => {
+      if (!start) start = ts;
+      const progress = Math.min((ts - start) / duration, 1);
+      setValue(Math.floor(progress * target));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [target, duration]);
+  return value;
+}
+
+/* ─── Stat pill ─── */
+interface StatPillProps {
+  label: string;
+  value: number;
+  icon: React.ElementType;
+  accent: string;        // Tailwind bg class for the glow dot
+  darkAccent: string;    // dark mode variant
+  delay?: number;
+}
+function StatPill({ label, value, icon: Icon, accent, darkAccent, delay = 0 }: StatPillProps) {
+  const animated = useCountUp(value);
+  return (
+    <div
+      className="group relative flex items-center gap-4 rounded-2xl border border-slate-200/70 dark:border-white/10
+                 bg-white/80 dark:bg-white/5 backdrop-blur-md px-5 py-4 shadow-sm
+                 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      {/* Coloured glow blob */}
+      <span className={`absolute -top-1 -left-1 h-3 w-3 rounded-full ${accent} opacity-80 blur-sm`} />
+
+      <div className={`flex items-center justify-center rounded-xl p-2.5 ${accent} bg-opacity-15 dark:${darkAccent} dark:bg-opacity-20`}>
+        <Icon className="h-5 w-5 text-slate-700 dark:text-slate-200" />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">{label}</p>
+        <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-white leading-none mt-0.5">{animated}</p>
+      </div>
+
+      <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-300 dark:text-slate-600 group-hover:text-slate-500 dark:group-hover:text-slate-300 transition-colors" />
+    </div>
+  );
+}
+
+/* ─── Custom Tooltip ─── */
+const ChartTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xl px-3 py-2 text-xs">
+      <p className="font-semibold text-slate-500 dark:text-slate-400 mb-1">{label}</p>
+      <p className="text-slate-800 dark:text-white font-bold">{payload[0].value} tasks</p>
+    </div>
+  );
+};
+
+/* ══════════════════════════════════════════════════════
+   Main Dashboard
+══════════════════════════════════════════════════════ */
 const Dashboard = () => {
   const { user, role } = useAuth();
-  const [stats, setStats] = useState({
-    total: 0,
-    inProgress: 0,
-    completed: 0,
-    departments: 0,
-    overdue: 0,
-    underReview: 0,
+  const navigate = useNavigate();
+
+  const [stats, setStats] = useState<DashboardStats>({
+    total: 0, inProgress: 0, completed: 0,
+    departments: 0, overdue: 0, underReview: 0,
   });
   const [deptChart, setDeptChart] = useState<{ name: string; tasks: number }[]>([]);
   const [trendChart, setTrendChart] = useState<{ date: string; completed: number }[]>([]);
+  const [userPerformance, setUserPerformance] = useState<{
+    users: Array<{
+      user_id: string; full_name: string; email: string;
+      department_name: string; total_tasks: number;
+      completed_tasks: number; in_progress_tasks: number;
+      overdue_tasks: number; completion_rate: number;
+    }>;
+  }>({ users: [] });
+  const [loading, setLoading] = useState(true);
 
+  /* ── unchanged data-fetching logic ── */
   useEffect(() => {
     if (!user || !role) return;
-
-    const fetchStats = async () => {
-      const now = new Date();
-
-      if (role === 'admin') {
-        // Admin: sees everything across all departments
-        const [tasksRes, deptRes, deptsCountRes] = await Promise.all([
-          supabase.from('tasks').select('status, due_date, department_id, created_at'),
-          supabase.from('departments').select('id, name'),
-          supabase.from('departments').select('id', { count: 'exact', head: true }),
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        const token = localStorage.getItem('b1g_token');
+        const [statsResponse, chartResponse, performanceResponse] = await Promise.all([
+          fetch(`${API_BASE}/data/dashboard/stats`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          }),
+          fetch(`${API_BASE}/data/dashboard/chart-data`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          }),
+          ...(role === 'admin' || role === 'manager'
+            ? [fetch(`${API_BASE}/data/dashboard/user-performance`, {
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+              })]
+            : []),
         ]);
 
-        const tasks = tasksRes.data || [];
-        const depts = deptRes.data || [];
+        if (statsResponse.ok && chartResponse.ok) {
+          const statsData = await statsResponse.json();
+          const chartData = await chartResponse.json();
+          const performanceData = performanceResponse && performanceResponse.ok
+            ? await performanceResponse.json() : null;
 
-        setStats({
-          total: tasks.length,
-          inProgress: tasks.filter(t => t.status === 'in_progress').length,
-          completed: tasks.filter(t => t.status === 'completed').length,
-          departments: deptsCountRes.count || 0,
-          overdue: tasks.filter(t => t.due_date && new Date(t.due_date) < now && t.status !== 'completed').length,
-          underReview: tasks.filter(t => t.status === 'under_review').length,
-        });
-
-        setDeptChart(depts.map(d => ({
-          name: d.name,
-          tasks: tasks.filter(t => t.department_id === d.id).length,
-        })));
-
-        setTrendChart(buildTrend(tasks));
-
-      } else if (role === 'manager') {
-        // Manager: sees tasks only within their department(s)
-        const { data: myDepts } = await supabase
-          .from('user_departments')
-          .select('department_id')
-          .eq('user_id', user.id);
-
-        const deptIds = (myDepts || []).map(d => d.department_id);
-
-        if (!deptIds.length) return;
-
-        const [tasksRes, deptRes] = await Promise.all([
-          supabase.from('tasks').select('status, due_date, department_id, created_at').in('department_id', deptIds),
-          supabase.from('departments').select('id, name').in('id', deptIds),
-        ]);
-
-        const tasks = tasksRes.data || [];
-        const depts = deptRes.data || [];
-
-        setStats({
-          total: tasks.length,
-          inProgress: tasks.filter(t => t.status === 'in_progress').length,
-          completed: tasks.filter(t => t.status === 'completed').length,
-          departments: deptIds.length,
-          overdue: tasks.filter(t => t.due_date && new Date(t.due_date) < now && t.status !== 'completed').length,
-          underReview: tasks.filter(t => t.status === 'under_review').length,
-        });
-
-        setDeptChart(depts.map(d => ({
-          name: d.name,
-          tasks: tasks.filter(t => t.department_id === d.id).length,
-        })));
-
-        setTrendChart(buildTrend(tasks));
-
-      } else {
-        // User: sees only tasks assigned to them
-        const { data: tasksData } = await supabase
-          .from('tasks')
-          .select('status, due_date, department_id, created_at')
-          .eq('assigned_to', user.id);
-
-        const tasks = tasksData || [];
-
-        setStats({
-          total: tasks.length,
-          inProgress: tasks.filter(t => t.status === 'in_progress').length,
-          completed: tasks.filter(t => t.status === 'completed').length,
-          departments: 0,
-          overdue: tasks.filter(t => t.due_date && new Date(t.due_date) < now && t.status !== 'completed').length,
-          underReview: tasks.filter(t => t.status === 'under_review').length,
-        });
-
-        // No dept chart for regular users — show task status distribution instead
-        setDeptChart([
-          { name: 'To Do', tasks: tasks.filter(t => t.status === 'todo').length },
-          { name: 'In Progress', tasks: tasks.filter(t => t.status === 'in_progress').length },
-          { name: 'Under Review', tasks: tasks.filter(t => t.status === 'under_review').length },
-          { name: 'Completed', tasks: tasks.filter(t => t.status === 'completed').length },
-        ]);
-
-        setTrendChart(buildTrend(tasks));
+          setStats({
+            total: statsData.data.total,
+            inProgress: statsData.data.inProgress,
+            completed: statsData.data.completed,
+            departments: statsData.data.departments,
+            overdue: statsData.data.overdue,
+            underReview: statsData.data.underReview,
+          });
+          setDeptChart(chartData.data.deptChart);
+          setTrendChart(chartData.data.trendChart);
+          if (performanceData) setUserPerformance(performanceData.data);
+        } else {
+          setStats({ total: 0, inProgress: 0, completed: 0, departments: 0, overdue: 0, underReview: 0 });
+          setDeptChart([]);
+          setTrendChart([]);
+          setUserPerformance({ users: [] });
+        }
+      } catch {
+        setStats({ total: 0, inProgress: 0, completed: 0, departments: 0, overdue: 0, underReview: 0 });
+        setDeptChart([]);
+        setTrendChart([]);
+        setUserPerformance({ users: [] });
+      } finally {
+        setLoading(false);
       }
     };
-
-    fetchStats();
+    fetchDashboardData();
   }, [user, role]);
 
-  // Builds last-7-days completion trend from task array
-  const buildTrend = (tasks: any[]) => {
-    const trend: { date: string; completed: number }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
-      trend.push({
-        date: d.toLocaleDateString('en', { weekday: 'short' }),
-        completed: tasks.filter(
-          t => t.status === 'completed' && t.created_at?.startsWith(dateStr)
-        ).length,
-      });
-    }
-    return trend;
-  };
+  /* ── label helpers ── */
+  const getTitle = () =>
+    role === 'admin' ? 'Admin Dashboard'
+    : role === 'manager' ? 'Manager Dashboard'
+    : 'My Dashboard';
 
-  const getTitle = () => {
-    switch (role) {
-      case 'admin': return 'Admin Dashboard';
-      case 'manager': return 'Manager Dashboard';
-      default: return 'My Dashboard';
-    }
-  };
+  const getSubtitle = () =>
+    role === 'admin' ? 'Overview of all departments, tasks and progress'
+    : role === 'manager' ? 'Overview of your department tasks and team progress'
+    : 'Overview of your assigned tasks and progress';
 
-  const getSubtitle = () => {
-    switch (role) {
-      case 'admin': return 'Overview of all departments, tasks and progress';
-      case 'manager': return 'Overview of your department tasks and team progress';
-      default: return 'Overview of your assigned tasks and progress';
-    }
-  };
+  const getChartTitle = () =>
+    role === 'admin' ? 'Tasks by Department'
+    : role === 'manager' ? 'Task Distribution'
+    : 'My Task Status';
 
-  const getChartTitle = () => {
-    switch (role) {
-      case 'admin': return 'Tasks by Department';
-      case 'manager': return 'Task Distribution';
-      default: return 'My Task Status';
-    }
-  };
+  /* ── fourth stat pill ── */
+  const fourthStat = role === 'admin'
+    ? { label: 'Departments', value: stats.departments, icon: Building2, accent: 'bg-violet-400', darkAccent: 'bg-violet-500' }
+    : role === 'manager'
+    ? { label: 'Under Review', value: stats.underReview, icon: Eye, accent: 'bg-cyan-400', darkAccent: 'bg-cyan-500' }
+    : { label: 'Overdue', value: stats.overdue, icon: AlertTriangle, accent: 'bg-rose-400', darkAccent: 'bg-rose-500' };
+
+  /* ── completion % for mini arc ── */
+  const completionPct = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
 
   return (
     <AppLayout>
-      <div className="space-y-6 animate-fade-in">
-        <div>
-          <h1 className="text-2xl font-display font-bold">{getTitle()}</h1>
-          <p className="text-muted-foreground">{getSubtitle()}</p>
+      <div className="relative min-h-screen space-y-7 px-1 pb-12 animate-fade-in">
+
+        {/* ── Ambient background blobs (light + dark) ── */}
+        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+          <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-violet-300/20 dark:bg-violet-700/10 blur-3xl" />
+          <div className="absolute top-1/2 -left-24 h-72 w-72 rounded-full bg-cyan-300/20 dark:bg-cyan-700/10 blur-3xl" />
+          <div className="absolute bottom-0 right-1/3 h-64 w-64 rounded-full bg-indigo-300/15 dark:bg-indigo-700/10 blur-3xl" />
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatsCard title="Total Tasks" value={stats.total} icon={ListTodo} />
-          <StatsCard title="In Progress" value={stats.inProgress} icon={Clock} />
-          <StatsCard title="Completed" value={stats.completed} icon={CheckCircle2} trend="up" />
-          {role === 'admin' ? (
-            <StatsCard title="Departments" value={stats.departments} icon={Building2} />
-          ) : role === 'manager' ? (
-            <StatsCard title="Under Review" value={stats.underReview} icon={Eye} />
-          ) : (
-            <StatsCard title="Overdue" value={stats.overdue} icon={AlertTriangle} />
-          )}
+        {/* ── Page header ── */}
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.2em] text-violet-500 dark:text-violet-400">
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            </p>
+            <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+              {getTitle()}
+            </h1>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{getSubtitle()}</p>
+          </div>
+
+          {/* Completion ring */}
+          <div className="hidden sm:flex flex-col items-center gap-1">
+            <svg viewBox="0 0 56 56" className="h-14 w-14 -rotate-90">
+              <circle cx="28" cy="28" r="22" fill="none" strokeWidth="5"
+                className="stroke-slate-100 dark:stroke-white/10" />
+              <circle cx="28" cy="28" r="22" fill="none" strokeWidth="5"
+                strokeDasharray={`${2 * Math.PI * 22}`}
+                strokeDashoffset={`${2 * Math.PI * 22 * (1 - completionPct / 100)}`}
+                strokeLinecap="round"
+                className="stroke-violet-500 dark:stroke-violet-400 transition-all duration-700" />
+            </svg>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+              {completionPct}% done
+            </p>
+          </div>
         </div>
 
+        {/* ── Stat pills row ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatPill label="Total Tasks"  value={stats.total}      icon={ListTodo}     accent="bg-indigo-400"  darkAccent="bg-indigo-500"  delay={0}   />
+          <StatPill label="In Progress"  value={stats.inProgress} icon={Activity}     accent="bg-amber-400"  darkAccent="bg-amber-500"  delay={80}  />
+          <StatPill label="Completed"    value={stats.completed}  icon={CheckCircle2} accent="bg-emerald-400" darkAccent="bg-emerald-500" delay={160} />
+          <StatPill label={fourthStat.label} value={fourthStat.value} icon={fourthStat.icon}
+                    accent={fourthStat.accent} darkAccent={fourthStat.darkAccent} delay={240} />
+        </div>
+
+        {/* ── Charts row ── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Tasks by Department / Status Distribution */}
-          <Card className="border-border/50">
-            <CardHeader>
-              <CardTitle className="text-lg font-display">{getChartTitle()}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {deptChart.length > 0 ? (
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={deptChart}>
-                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Bar dataKey="tasks" fill="hsl(262, 83%, 58%)" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="text-sm text-muted-foreground py-8 text-center">No data yet</p>
-              )}
-            </CardContent>
-          </Card>
 
-          {/* Completion Trend */}
-          <Card className="border-border/50">
-            <CardHeader>
-              <CardTitle className="text-lg font-display">Completion Trend</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={trendChart}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(240, 5%, 90%)" />
-                  <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Line
-                    type="monotone"
-                    dataKey="completed"
-                    stroke="hsl(262, 83%, 58%)"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                  />
-                </LineChart>
+          {/* Tasks by Dept bar chart */}
+          <div className="rounded-2xl border border-slate-200/70 dark:border-white/10
+                          bg-white/80 dark:bg-white/5 backdrop-blur-md shadow-sm p-5
+                          hover:shadow-md transition-shadow duration-300">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Chart</p>
+                <h2 className="text-base font-bold text-slate-800 dark:text-white">{getChartTitle()}</h2>
+              </div>
+              <span className="flex items-center gap-1 rounded-full bg-violet-50 dark:bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold text-violet-600 dark:text-violet-400">
+                <Zap className="h-3 w-3" /> Live
+              </span>
+            </div>
+
+            {deptChart.length > 0 ? (
+              <ResponsiveContainer width="100%" height={210}>
+                <BarChart data={deptChart} barCategoryGap="35%">
+                  <defs>
+                    <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(262,83%,58%)" stopOpacity={1} />
+                      <stop offset="100%" stopColor="hsl(240,80%,70%)" stopOpacity={0.7} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'currentColor' }}
+                    axisLine={false} tickLine={false} className="text-slate-400 dark:text-slate-500" />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'currentColor' }}
+                    axisLine={false} tickLine={false} width={24} className="text-slate-400 dark:text-slate-500" />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(139,92,246,0.06)' }} />
+                  <Bar dataKey="tasks" fill="url(#barGrad)" radius={[6, 6, 0, 0]} maxBarSize={40} />
+                </BarChart>
               </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Overdue Tasks */}
-          <Card className="border-border/50">
-            <CardHeader>
-              <CardTitle className="text-lg font-display">Overdue Tasks</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {stats.overdue === 0 ? (
-                <p className="text-muted-foreground text-sm">No overdue tasks 🎉</p>
-              ) : (
-                <p className="text-sm text-destructive font-medium">
-                  {stats.overdue} task(s) past due date
+            ) : (
+              <div className="flex h-[210px] items-center justify-center">
+                <p className="text-sm text-slate-400 dark:text-slate-500">
+                  {loading ? 'Loading data…' : 'No data yet'}
                 </p>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+            )}
+          </div>
 
-          {/* Quick Stats */}
-          <Card className="border-border/50">
-            <CardHeader>
-              <CardTitle className="text-lg font-display">Quick Stats</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Completion Rate</span>
-                <span className="font-medium">
-                  {stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0}%
-                </span>
+          {/* Completion trend area chart */}
+          <div className="rounded-2xl border border-slate-200/70 dark:border-white/10
+                          bg-white/80 dark:bg-white/5 backdrop-blur-md shadow-sm p-5
+                          hover:shadow-md transition-shadow duration-300">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Trend</p>
+                <h2 className="text-base font-bold text-slate-800 dark:text-white">Completion Trend</h2>
               </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div
-                  className="gradient-primary h-2 rounded-full transition-all"
-                  style={{
-                    width: `${stats.total > 0 ? (stats.completed / stats.total) * 100 : 0}%`,
-                  }}
-                />
+              <TrendingUp className="h-4 w-4 text-emerald-500" />
+            </div>
+
+            <ResponsiveContainer width="100%" height={210}>
+              <AreaChart data={trendChart}>
+                <defs>
+                  <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(262,83%,58%)" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="hsl(262,83%,58%)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.15)" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} axisLine={false} tickLine={false}
+                  className="text-slate-400 dark:text-slate-500" />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} axisLine={false} tickLine={false}
+                  width={24} className="text-slate-400 dark:text-slate-500" />
+                <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'rgba(139,92,246,0.3)', strokeWidth: 1 }} />
+                <Area type="monotone" dataKey="completed" stroke="hsl(262,83%,58%)" strokeWidth={2.5}
+                  fill="url(#areaGrad)" dot={{ r: 3.5, fill: 'hsl(262,83%,58%)', strokeWidth: 0 }}
+                  activeDot={{ r: 5, fill: 'hsl(262,83%,58%)' }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* ── Bottom cards ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+          {/* Overdue tasks */}
+          <button
+            onClick={() => navigate('/tracker?filter=overdue')}
+            className="group text-left rounded-2xl border border-slate-200/70 dark:border-white/10
+                       bg-white/80 dark:bg-white/5 backdrop-blur-md shadow-sm p-5
+                       hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 w-full"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">
+                  Attention needed
+                </p>
+                <h2 className="text-base font-bold text-slate-800 dark:text-white">Overdue Tasks</h2>
               </div>
-              <div className="flex justify-between text-sm mt-3">
-                <span className="text-muted-foreground">Under Review</span>
-                <span className="font-medium">{stats.underReview}</span>
-              </div>
-              {role !== 'user' && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Overdue</span>
-                  <span className="font-medium text-destructive">{stats.overdue}</span>
+              <span className={`flex items-center justify-center h-9 w-9 rounded-xl
+                ${stats.overdue > 0 ? 'bg-rose-50 dark:bg-rose-500/10' : 'bg-emerald-50 dark:bg-emerald-500/10'}`}>
+                <AlertTriangle className={`h-4 w-4 ${stats.overdue > 0 ? 'text-rose-500' : 'text-emerald-500'}`} />
+              </span>
+            </div>
+
+            <div className="mt-4">
+              {stats.overdue === 0 ? (
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                    All caught up — no overdue tasks 🎉
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-3xl font-black text-rose-500">{stats.overdue}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                    task{stats.overdue !== 1 ? 's' : ''} past their due date
+                  </p>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+
+            <div className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-slate-400
+                            group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
+              View in tracker <ArrowUpRight className="h-3.5 w-3.5" />
+            </div>
+          </button>
+
+          {/* Users Performance */}
+          <button
+            onClick={() => navigate('/performance')}
+            className="group text-left rounded-2xl border border-slate-200/70 dark:border-white/10
+                       bg-white/80 dark:bg-white/5 backdrop-blur-md shadow-sm p-5
+                       hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 w-full relative overflow-hidden"
+          >
+            {/* Decorative stripe */}
+            <div className="absolute right-0 top-0 bottom-0 w-1 rounded-r-2xl bg-gradient-to-b from-violet-500 to-indigo-500 opacity-60" />
+
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">
+                  Analytics
+                </p>
+                <h2 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                  <Users className="h-4 w-4 text-violet-500" />
+                  Users Performance
+                </h2>
+              </div>
+              <span className="flex items-center justify-center h-9 w-9 rounded-xl bg-violet-50 dark:bg-violet-500/10">
+                <Activity className="h-4 w-4 text-violet-500" />
+              </span>
+            </div>
+
+            <p className="mt-3 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+              View detailed completion rates and task metrics for every team member.
+            </p>
+
+            {/* Mini progress bars for first 3 users */}
+            {userPerformance?.users?.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {userPerformance?.users?.slice(0, 3).map((u) => (
+                  <div key={u.user_id} className="flex items-center gap-2">
+                    <p className="w-20 truncate text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                      {u.full_name?.split(' ')[0] ?? 'User'}
+                    </p>
+                    <div className="flex-1 h-1.5 rounded-full bg-slate-100 dark:bg-white/10 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-400 transition-all duration-700"
+                        style={{ width: `${Math.min(u.completion_rate, 100)}%` }}
+                      />
+                    </div>
+                    <p className="w-8 text-right text-[10px] font-bold text-slate-400 dark:text-slate-500">
+                      {Math.round(u.completion_rate)}%
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-slate-400
+                            group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
+              <ExternalLink className="h-3.5 w-3.5" /> View full report
+            </div>
+          </button>
         </div>
       </div>
     </AppLayout>

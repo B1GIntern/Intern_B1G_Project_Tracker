@@ -1,0 +1,77 @@
+// ─── EMAIL ────────────────────────────────────────────────────────────────────
+
+// Checks if the provided string is a valid email format
+
+export const isValidEmail = (email: string): boolean => {
+
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+};
+
+
+
+// ─── PASSWORD ─────────────────────────────────────────────────────────────────
+
+// Password must be at least 8 characters long
+
+export const isValidPassword = (password: string): boolean => {
+
+    return password.length >= 8;
+
+};
+
+
+
+// ─── REQUIRED FIELDS ──────────────────────────────────────────────────────────
+
+// Checks that all required fields exist and are not empty strings in the request body.
+
+// Returns the name of the first missing field, or null if all are present.
+
+// Usage: const missing = getMissingField(req.body, ['email', 'password', 'fullName'])
+
+export const getMissingField = (
+
+    body: Record<string, unknown>,
+
+    fields: string[]
+
+): string | null => {
+
+    for (const field of fields) {
+
+        if (!body[field] || String(body[field]).trim() === '') {
+
+            return field;
+
+        }
+
+    }
+
+    return null;
+
+};
+
+
+
+// ─── ROLE ─────────────────────────────────────────────────────────────────────
+
+// Checks if the provided role is one of the 3 valid app roles
+
+export const isValidRole = (role: string): boolean => {
+
+    return ['admin', 'manager', 'employee'].includes(role);
+
+};
+
+
+
+// ─── UUID ─────────────────────────────────────────────────────────────────────
+
+// Checks if the provided string is a valid UUID (used for ID params)
+
+export const isValidUUID = (id: string): boolean => {
+
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+};

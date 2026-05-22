@@ -1,8 +1,28 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Search, ListTodo, User, Building2 } from 'lucide-react';
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
+
+interface Department {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+interface User {
+  id: string;
+  full_name: string;
+  email: string;
+  role: string;
+}
+
+interface Task {
+  id: string;
+  title: string;
+  status?: string;
+}
 
 interface SearchResult {
   type: 'task' | 'user' | 'department';
@@ -13,10 +33,162 @@ interface SearchResult {
 
 const GlobalSearch = () => {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const navigate = useNavigate();
   const ref = useRef<HTMLDivElement>(null);
+
+  // Get user role from localStorage
+  const userStr = localStorage.getItem('b1g_user');
+  const user = userStr ? JSON.parse(userStr) : null;
+  const isManager = user?.role === 'manager';
+  const isEmployee = user?.role === 'employee';
+
+  // Fetch real departments from API (admin only)
+  useEffect(() => {
+    if (isManager || isEmployee) return; // Skip for managers and employees
+    
+    const fetchDepartments = async () => {
+      try {
+        const token = localStorage.getItem('b1g_token');
+        if (!token) return;
+        
+        const res = await fetch(`${API_BASE}/departments`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+        });
+        
+        if (!res.ok) {
+          if (res.status === 401) {
+            localStorage.removeItem('b1g_token');
+            localStorage.removeItem('b1g_user');
+            return;
+          }
+          throw new Error('Failed to fetch departments');
+        }
+        
+        const data = await res.json();
+        setDepartments(data.data || []);
+      } catch (error) {
+        console.error('Failed to fetch departments for search:', error);
+      }
+    };
+    
+    fetchDepartments();
+  }, [isManager]);
+
+  // Fetch users from API (managers only - not for employees or admins in search)
+  useEffect(() => {
+    // Only fetch for managers
+    if (!isManager) return;
+    
+    const fetchUsers = async () => {
+      try {
+        const token = localStorage.getItem('b1g_token');
+        if (!token) return;
+        
+        // Managers fetch their team members
+        const res = await fetch(`${API_BASE}/users/team`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+        });
+        
+        if (!res.ok) {
+          if (res.status === 401) {
+            localStorage.removeItem('b1g_token');
+            localStorage.removeItem('b1g_user');
+            return;
+          }
+          throw new Error('Failed to fetch users');
+        }
+        
+        const data = await res.json();
+        setUsers(data.data || []);
+      } catch (error) {
+        console.error('Failed to fetch users for search:', error);
+      }
+    };
+    
+    fetchUsers();
+  }, [isManager]);
+
+  // Fetch real tasks from API
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const token = localStorage.getItem('b1g_token');
+        if (!token) return;
+        
+        const res = await fetch(`${API_BASE}/tasks`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+        });
+        
+        if (!res.ok) {
+          if (res.status === 401) {
+            localStorage.removeItem('b1g_token');
+            localStorage.removeItem('b1g_user');
+            return;
+          }
+          throw new Error('Failed to fetch tasks');
+        }
+        
+        const data = await res.json();
+        setTasks(data.data || []);
+      } catch (error) {
+        console.error('Failed to fetch tasks for search:', error);
+      }
+    };
+    
+    fetchTasks();
+  }, []);
+
+  // Combine real data from API
+  const allData = useMemo(() => {
+    const taskResults: SearchResult[] = tasks.map(t => ({
+      type: 'task' as const,
+      id: t.id,
+      label: t.title,
+      sublabel: t.status || 'Task'
+    }));
+
+    // Employees don't see departments or users
+    const deptResults: SearchResult[] = (isManager || isEmployee) ? [] : departments.map(d => ({
+      type: 'department' as const,
+      id: d.id,
+      label: d.name,
+      sublabel: d.description || 'Department'
+    }));
+
+    // Employees don't see users
+    const userResults: SearchResult[] = isEmployee ? [] : users.map(u => ({
+      type: 'user' as const,
+      id: u.id,
+      label: u.full_name,
+      sublabel: u.role
+    }));
+
+    return [...taskResults, ...deptResults, ...userResults];
+  }, [tasks, departments, users, isManager, isEmployee]);
+
+  // Filter results based on query
+  const results = useMemo(() => {
+    if (query.length < 2) return [];
+    
+    const queryLower = query.toLowerCase();
+    return allData.filter(item => 
+      item.label.toLowerCase().includes(queryLower) ||
+      (item.sublabel && item.sublabel.toLowerCase().includes(queryLower))
+    ).slice(0, 8); // Limit to 8 results
+  }, [query, allData]);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -27,32 +199,15 @@ const GlobalSearch = () => {
   }, []);
 
   useEffect(() => {
-    if (query.length < 2) { setResults([]); return; }
-    const timer = setTimeout(async () => {
-      const q = `%${query}%`;
-      const [tasksRes, profilesRes, deptsRes] = await Promise.all([
-        supabase.from('tasks').select('id, title, status').ilike('title', q).limit(5),
-        supabase.from('profiles').select('user_id, full_name, email').ilike('full_name', q).limit(5),
-        supabase.from('departments').select('id, name').ilike('name', q).limit(5),
-      ]);
-
-      const r: SearchResult[] = [
-        ...(tasksRes.data || []).map(t => ({ type: 'task' as const, id: t.id, label: t.title, sublabel: t.status })),
-        ...(profilesRes.data || []).map(p => ({ type: 'user' as const, id: p.user_id, label: p.full_name, sublabel: p.email })),
-        ...(deptsRes.data || []).map(d => ({ type: 'department' as const, id: d.id, label: d.name })),
-      ];
-      setResults(r);
-      setOpen(r.length > 0);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [query]);
+    setOpen(results.length > 0 && query.length >= 2);
+  }, [results, query]);
 
   const handleSelect = (r: SearchResult) => {
     setOpen(false);
     setQuery('');
     if (r.type === 'task') navigate('/tracker');
-    else if (r.type === 'user') navigate('/users');
-    else navigate('/departments');
+    else if (r.type === 'user') navigate(isManager ? '/team' : '/users');
+    else if (r.type === 'department') navigate('/departments');
   };
 
   const iconMap = { task: ListTodo, user: User, department: Building2 };
@@ -61,7 +216,7 @@ const GlobalSearch = () => {
     <div className="relative" ref={ref}>
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
       <Input
-        placeholder="Search tasks, users, departments..."
+        placeholder={isEmployee ? "Search tasks..." : isManager ? "Search tasks, team members..." : "Search tasks, users, departments..."}
         value={query}
         onChange={e => setQuery(e.target.value)}
         onFocus={() => results.length > 0 && setOpen(true)}
