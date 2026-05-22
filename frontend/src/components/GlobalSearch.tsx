@@ -81,19 +81,18 @@ const GlobalSearch = () => {
     fetchDepartments();
   }, [isManager]);
 
-  // Fetch users from API (admin and managers only)
+  // Fetch users from API (managers only - not for employees or admins in search)
   useEffect(() => {
-    if (isEmployee) return; // Skip for employees
+    // Only fetch for managers
+    if (!isManager) return;
     
     const fetchUsers = async () => {
       try {
         const token = localStorage.getItem('b1g_token');
         if (!token) return;
         
-        // Use different endpoint based on role
-        const endpoint = isManager ? `${API_BASE}/users/team` : `${API_BASE}/users`;
-        
-        const res = await fetch(endpoint, {
+        // Managers fetch their team members
+        const res = await fetch(`${API_BASE}/users/team`, {
           headers: { 
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'

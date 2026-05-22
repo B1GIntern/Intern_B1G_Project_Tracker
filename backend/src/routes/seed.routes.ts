@@ -251,4 +251,129 @@ router.post('/test-task', async (req, res) => {
     }
 });
 
+// POST /api/seed/demo-data - Create demo tasks for a user by email
+router.post('/demo-data', async (req, res) => {
+    try {
+        const { userEmail } = req.body;
+
+        if (!userEmail) {
+            return res.status(400).json({
+                success: false,
+                message: 'userEmail is required'
+            });
+        }
+
+        console.log(`🔧 Creating demo tasks for user: ${userEmail}`);
+
+        // Get user ID by email
+        const userResult = await db.query(
+            `SELECT p.id, ur.role_name FROM profile p 
+             LEFT JOIN users_role ur ON p.id = ur.user_id 
+             WHERE p.email = $1`,
+            [userEmail]
+        );
+
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const userId = userResult.rows[0].id;
+
+        // Get first department or create a default one
+        let deptResult = await db.query('SELECT id FROM departments LIMIT 1');
+        let deptId = deptResult.rows[0]?.id;
+
+        if (!deptId) {
+            const newDeptResult = await db.query(
+                `INSERT INTO departments (name, description) VALUES ($1, $2) RETURNING id`,
+                ['General', 'General department']
+            );
+            deptId = newDeptResult.rows[0].id;
+        }
+
+        // Create multiple demo tasks
+        const tasks = [
+            {
+                title: 'Complete Project Proposal',
+                description: 'Draft and finalize the Q2 project proposal',
+                status: 'in_progress',
+                daysFromNow: 7
+            },
+            {
+                title: 'Review Code Submissions',
+                description: 'Review pull requests from team members',
+                status: 'todo',
+                daysFromNow: 3
+            },
+            {
+                title: 'Update Documentation',
+                description: 'Update API documentation for v2.0',
+                status: 'completed',
+                daysFromNow: -5
+            },
+            {
+                title: 'Client Meeting Preparation',
+                description: 'Prepare slides and talking points for client demo',
+                status: 'in_progress',
+                daysFromNow: 2
+            },
+            {
+                title: 'Performance Optimization',
+                description: 'Optimize database queries for better performance',
+                status: 'todo',
+                daysFromNow: 14
+            },
+            {
+                title: 'Security Audit',
+                description: 'Conduct security audit on new features',
+                status: 'todo',
+                daysFromNow: 5
+            }
+        ];
+
+        const createdTasks = [];
+
+        for (const task of tasks) {
+            const dueDate = new Date(Date.now() + task.daysFromNow * 24 * 60 * 60 * 1000).toISOString();
+            
+            const taskResult = await db.query(
+                `INSERT INTO tracker_tasks 
+                 (title, description, status, assigned_to, created_by, department_id, due_date, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+                 RETURNING *`,
+                [
+                    task.title,
+                    task.description,
+                    task.status,
+                    userId,
+                    userId,
+                    deptId,
+                    dueDate
+                ]
+            );
+
+            createdTasks.push(taskResult.rows[0]);
+        }
+
+        console.log(`✅ Demo tasks created successfully! (${createdTasks.length} tasks)`);
+
+        res.json({
+            success: true,
+            message: `Created ${createdTasks.length} demo tasks successfully`,
+            tasks: createdTasks
+        });
+
+    } catch (error: any) {
+        console.error('❌ Seed demo data failed:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create demo data',
+            error: error.message
+        });
+    }
+});
+
 export default router;
